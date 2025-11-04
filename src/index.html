@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Docker PostgreSQL Manager</title>
+    <script type="module" src="/main.js?v=9999999999" defer></script>
+  </head>
+
+  <body>
+    <div class="app-container">
+      <!-- Header -->
+      <header class="header">
+        <h1>🐘 PostgreSQL Manager</h1>
+        <div class="header-actions">
+          <button id="refresh-btn" class="btn btn-secondary">🔄 Actualizar</button>
+          <button id="new-db-btn" class="btn btn-primary">➕ Nueva base de datos</button>
+        </div>
+      </header>
+
+      <!-- Docker Status -->
+      <div class="status-bar">
+        <span id="docker-status">Verificando Docker...</span>
+      </div>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Containers List -->
+        <section class="containers-section">
+          <h2>Bases de datos</h2>
+          <div id="containers-list" class="containers-grid">
+            <!-- Containers will be loaded here -->
+          </div>
+          <div id="no-containers" class="no-data" style="display: none;">
+            <p>No hay bases de datos creadas. ¡Crea una nueva!</p>
+          </div>
+        </section>
+      </main>
+
+      <!-- Modal: Create Database -->
+      <div id="create-modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Crear base de datos PostgreSQL</h2>
+            <button class="close-btn" onclick="closeCreateModal()">✕</button>
+          </div>
+          <form id="create-form" class="modal-body">
+            <div class="form-group">
+              <label for="db-name">Nombre de la base de datos:</label>
+              <input type="text" id="db-name" required placeholder="mi_database" />
+            </div>
+            <div class="form-group">
+              <label for="db-username">Usuario:</label>
+              <input type="text" id="db-username" required placeholder="postgres" value="postgres" />
+            </div>
+            <div class="form-group">
+              <label for="db-password">Contraseña:</label>
+              <input type="password" id="db-password" required placeholder="••••••••" />
+            </div>
+            <div class="form-group">
+              <label for="db-port">Puerto:</label>
+              <input type="number" id="db-port" required placeholder="5544" value="5544" min="1024" max="65535" />
+            </div>
+            <div class="form-group">
+              <label for="db-version">Versión de PostgreSQL:</label>
+              <select id="db-version" required>
+                <option value="16">PostgreSQL 16</option>
+                <option value="15" selected>PostgreSQL 15</option>
+                <option value="14">PostgreSQL 14</option>
+                <option value="13">PostgreSQL 13</option>
+                <option value="12">PostgreSQL 12</option>
+              </select>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancelar</button>
+              <button type="submit" class="btn btn-primary">Crear</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Modal: Logs -->
+      <div id="logs-modal" class="modal">
+        <div class="modal-content modal-large">
+          <div class="modal-header">
+            <h2>Logs del contenedor</h2>
+            <button class="close-btn" onclick="closeLogsModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div id="logs-content" class="logs-container">
+              <p>Cargando logs...</p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeLogsModal()">Cerrar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: SQL Console -->
+      <div id="sql-modal" class="modal">
+        <div class="modal-content modal-large">
+          <div class="modal-header">
+            <h2>Consola SQL</h2>
+            <button class="close-btn" onclick="closeSqlModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <form id="sql-form">
+              <div class="form-group">
+                <label for="sql-query">Consulta SQL:</label>
+                <textarea id="sql-query" rows="6" placeholder="SELECT * FROM tabla;"></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary">Ejecutar</button>
+            </form>
+            <div id="sql-result" class="sql-result">
+              <h3>Resultado:</h3>
+              <pre id="sql-output">Los resultados aparecerán aquí...</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+      <div class="spinner"></div>
+      <p>Cargando...</p>
+    </div>
+  </body>
+</html>

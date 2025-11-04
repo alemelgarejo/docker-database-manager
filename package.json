@@ -1,0 +1,18 @@
+{
+  "name": "docker-db-manager",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Docker PostgreSQL Database Manager for macOS",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "clean": "rm -rf node_modules src-tauri/target",
+    "test": "cd src-tauri && cargo test --lib -- --nocapture --test-threads=1",
+    "test:watch": "cd src-tauri && cargo watch -x 'test --lib -- --nocapture --test-threads=1'"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
