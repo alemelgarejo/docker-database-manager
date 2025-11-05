@@ -117,14 +117,16 @@ async function loadContainers() {
     
     noData.style.display = 'none';
     list.innerHTML = containers.map(c => {
-      const shortId = c.id.substring(0, 12); // Mostrar solo los primeros 12 caracteres
+      const shortId = c.id.substring(0, 12);
+      const dbTypeName = c.db_type.charAt(0).toUpperCase() + c.db_type.slice(1);
       return `
       <div class="container-card">
         <div class="container-header">
-          <h3 class="container-title">${c.name}</h3>
+          <h3 class="container-title">${c.db_icon} ${c.name}</h3>
           <span class="status-badge status-${c.status}">${c.status}</span>
         </div>
         <div class="container-info">
+          <div class="info-row"><span class="info-label">Tipo:</span><span>${dbTypeName}</span></div>
           <div class="info-row"><span class="info-label">BD:</span><span>${c.database_name}</span></div>
           <div class="info-row"><span class="info-label">Puerto:</span><span>${c.port}</span></div>
           <div class="info-row"><span class="info-label">ID:</span><span title="${c.id}">${shortId}</span></div>
@@ -134,7 +136,9 @@ async function loadContainers() {
           ${c.status === 'running' ? `
             <button class="btn btn-warning btn-sm" onclick="stopC('${c.id}')">⏸️ Detener</button>
             <button class="btn btn-primary btn-sm" onclick="showLogs('${c.id}')">📋 Logs</button>
-            <button class="btn btn-success btn-sm" onclick="showSQL('${c.id}','${c.database_name}')">💻 SQL</button>
+            ${c.db_type === 'postgresql' || c.db_type === 'mysql' || c.db_type === 'mariadb' ? `
+              <button class="btn btn-success btn-sm" onclick="showSQL('${c.id}','${c.database_name}')">💻 SQL</button>
+            ` : ''}
           ` : `
             <button class="btn btn-success btn-sm" onclick="startC('${c.id}')">▶️ Iniciar</button>
           `}
@@ -150,21 +154,27 @@ async function loadContainers() {
 
 async function createDB(e) {
   e.preventDefault();
+  
+  if (!selectedDbType) {
+    showNotification('Selecciona un tipo de base de datos', 'error');
+    return;
+  }
+  
   showLoading();
   try {
     const config = {
       name: document.getElementById('db-name').value,
-      username: document.getElementById('db-username').value,
-      password: document.getElementById('db-password').value,
+      username: document.getElementById('db-username').value || '',
+      password: document.getElementById('db-password').value || '',
       port: parseInt(document.getElementById('db-port').value),
-      version: document.getElementById('db-version').value
+      version: document.getElementById('db-version').value,
+      type: selectedDbType
     };
     
     const result = await invoke('create_database', { config: config });
     
     showNotification(result, 'success');
-    document.getElementById('create-modal').classList.remove('active');
-    document.getElementById('create-form').reset();
+    window.closeCreateModal();
     await loadContainers();
   } catch (e) {
     showNotification('Error al crear BD: ' + e, 'error');
@@ -268,9 +278,110 @@ async function execSQL(e) {
   }
 }
 
+// Variables globales para el modal de creación
+let selectedDbType = null;
+let databaseTypes = [];
+
+// Cargar tipos de bases de datos
+async function loadDatabaseTypes() {
+  try {
+    databaseTypes = await invoke('get_database_types');
+    console.log('Database types loaded:', databaseTypes);
+  } catch (e) {
+    console.error('Error loading database types:', e);
+    showNotification('Error cargando tipos de BD: ' + e, 'error');
+  }
+}
+
+// Mostrar paso 1: Selección de tipo de BD
+function showStep1() {
+  document.getElementById('step-1').style.display = 'block';
+  document.getElementById('step-2').style.display = 'none';
+  
+  const grid = document.getElementById('db-types-grid');
+  grid.innerHTML = databaseTypes.map(type => `
+    <div class="db-type-card" onclick="selectDatabaseType('${type.id}')">
+      <div class="db-type-icon">${type.icon}</div>
+      <div class="db-type-name">${type.name}</div>
+    </div>
+  `).join('');
+}
+
+// Mostrar paso 2: Configuración de la BD
+function showStep2() {
+  document.getElementById('step-1').style.display = 'none';
+  document.getElementById('step-2').style.display = 'block';
+  
+  const dbType = databaseTypes.find(t => t.id === selectedDbType);
+  if (!dbType) return;
+  
+  // Actualizar encabezado
+  document.getElementById('selected-db-icon').textContent = dbType.icon;
+  document.getElementById('selected-db-name').textContent = dbType.name;
+  document.getElementById('modal-title').textContent = `Crear ${dbType.name}`;
+  
+  // Configurar valores por defecto
+  document.getElementById('db-port').value = dbType.default_port;
+  document.getElementById('db-username').value = dbType.default_user;
+  
+  // Mostrar/ocultar campos según el tipo
+  const usernameGroup = document.getElementById('username-group');
+  const passwordGroup = document.getElementById('password-group');
+  
+  if (selectedDbType === 'redis') {
+    // Redis no requiere usuario, contraseña es opcional
+    usernameGroup.style.display = 'none';
+    passwordGroup.querySelector('input').required = false;
+    passwordGroup.querySelector('label').textContent = 'Contraseña (opcional):';
+  } else if (selectedDbType === 'mongodb') {
+    // MongoDB puede funcionar sin autenticación
+    usernameGroup.style.display = 'block';
+    passwordGroup.style.display = 'block';
+    usernameGroup.querySelector('input').required = false;
+    passwordGroup.querySelector('input').required = false;
+    usernameGroup.querySelector('label').textContent = 'Usuario (opcional):';
+    passwordGroup.querySelector('label').textContent = 'Contraseña (opcional):';
+  } else {
+    // PostgreSQL, MySQL, MariaDB requieren usuario y contraseña
+    usernameGroup.style.display = 'block';
+    passwordGroup.style.display = 'block';
+    usernameGroup.querySelector('input').required = true;
+    passwordGroup.querySelector('input').required = true;
+    usernameGroup.querySelector('label').textContent = 'Usuario:';
+    passwordGroup.querySelector('label').textContent = 'Contraseña:';
+  }
+  
+  // Cargar versiones
+  const versionSelect = document.getElementById('db-version');
+  versionSelect.innerHTML = dbType.versions.map((v, i) => 
+    `<option value="${v}" ${i === 0 ? 'selected' : ''}>${dbType.name} ${v}</option>`
+  ).join('');
+}
+
+// Seleccionar tipo de base de datos
+window.selectDatabaseType = (typeId) => {
+  selectedDbType = typeId;
+  showStep2();
+};
+
+// Volver al paso 1
+window.goBackToStep1 = () => {
+  selectedDbType = null;
+  showStep1();
+  document.getElementById('create-form').reset();
+};
+
+// Abrir modal de creación
+window.openCreateModal = () => {
+  document.getElementById('create-modal').classList.add('active');
+  showStep1();
+};
+
 window.closeCreateModal = () => {
   document.getElementById('create-modal').classList.remove('active');
   document.getElementById('create-form').reset();
+  selectedDbType = null;
+  showStep1();
 };
 
 window.closeLogsModal = () => document.getElementById('logs-modal').classList.remove('active');
@@ -283,7 +394,11 @@ window.showLogs = showLogs;
 window.showSQL = showSQL;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  document.getElementById('new-db-btn').onclick = () => document.getElementById('create-modal').classList.add('active');
+  // Cargar tipos de bases de datos
+  await loadDatabaseTypes();
+  
+  // Event listeners
+  document.getElementById('new-db-btn').onclick = openCreateModal;
   document.getElementById('refresh-btn').onclick = loadContainers;
   document.getElementById('create-form').onsubmit = createDB;
   document.getElementById('sql-form').onsubmit = execSQL;

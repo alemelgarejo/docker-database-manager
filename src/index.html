@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Docker PostgreSQL Manager</title>
+    <title>Docker Database Manager</title>
     <script type="module" src="/main.js?v=9999999999" defer></script>
   </head>
 
@@ -12,7 +12,7 @@
     <div class="app-container">
       <!-- Header -->
       <header class="header">
-        <h1>🐘 PostgreSQL Manager</h1>
+        <h1>🗄️ Database Manager</h1>
         <div class="header-actions">
           <button id="refresh-btn" class="btn btn-secondary">🔄 Actualizar</button>
           <button id="new-db-btn" class="btn btn-primary">➕ Nueva base de datos</button>
@@ -23,7 +23,7 @@
       <div class="status-bar">
         <span id="docker-status">Verificando Docker...</span>
         <button onclick="window.checkUpdatesManually()" class="update-btn" title="Verificar actualizaciones">
-          🔄 Actualizar
+          🔄 Actualizar App
         </button>
       </div>
 
@@ -45,39 +45,58 @@
       <div id="create-modal" class="modal">
         <div class="modal-content">
           <div class="modal-header">
-            <h2>Crear base de datos PostgreSQL</h2>
+            <h2 id="modal-title">Crear nueva base de datos</h2>
             <button class="close-btn" onclick="closeCreateModal()">✕</button>
           </div>
           <form id="create-form" class="modal-body">
-            <div class="form-group">
-              <label for="db-name">Nombre de la base de datos:</label>
-              <input type="text" id="db-name" required placeholder="mi_database" />
+            <!-- Step 1: Select Database Type -->
+            <div id="step-1" class="form-step">
+              <h3>Selecciona el tipo de base de datos:</h3>
+              <div id="db-types-grid" class="db-types-grid">
+                <!-- Database types will be loaded here -->
+              </div>
             </div>
-            <div class="form-group">
-              <label for="db-username">Usuario:</label>
-              <input type="text" id="db-username" required placeholder="postgres" value="postgres" />
-            </div>
-            <div class="form-group">
-              <label for="db-password">Contraseña:</label>
-              <input type="password" id="db-password" required placeholder="••••••••" />
-            </div>
-            <div class="form-group">
-              <label for="db-port">Puerto:</label>
-              <input type="number" id="db-port" required placeholder="5544" value="5544" min="1024" max="65535" />
-            </div>
-            <div class="form-group">
-              <label for="db-version">Versión de PostgreSQL:</label>
-              <select id="db-version" required>
-                <option value="16">PostgreSQL 16</option>
-                <option value="15" selected>PostgreSQL 15</option>
-                <option value="14">PostgreSQL 14</option>
-                <option value="13">PostgreSQL 13</option>
-                <option value="12">PostgreSQL 12</option>
-              </select>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancelar</button>
-              <button type="submit" class="btn btn-primary">Crear</button>
+
+            <!-- Step 2: Configure Database -->
+            <div id="step-2" class="form-step" style="display: none;">
+              <button type="button" class="btn-back" onclick="goBackToStep1()">← Volver</button>
+              
+              <div class="selected-db-type">
+                <span id="selected-db-icon" class="db-icon-large"></span>
+                <span id="selected-db-name"></span>
+              </div>
+
+              <div class="form-group">
+                <label for="db-name">Nombre de la base de datos:</label>
+                <input type="text" id="db-name" required placeholder="mi_database" />
+              </div>
+
+              <div class="form-group" id="username-group">
+                <label for="db-username">Usuario:</label>
+                <input type="text" id="db-username" placeholder="usuario" />
+              </div>
+
+              <div class="form-group" id="password-group">
+                <label for="db-password">Contraseña:</label>
+                <input type="password" id="db-password" placeholder="••••••••" />
+              </div>
+
+              <div class="form-group">
+                <label for="db-port">Puerto:</label>
+                <input type="number" id="db-port" required placeholder="5432" min="1024" max="65535" />
+              </div>
+
+              <div class="form-group">
+                <label for="db-version">Versión:</label>
+                <select id="db-version" required>
+                  <!-- Versions will be loaded dynamically -->
+                </select>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Crear</button>
+              </div>
             </div>
           </form>
         </div>

@@ -525,6 +525,96 @@ body {
   background: var(--primary-color);
 }
 
+/* Database Type Selection */
+.db-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.db-type-card {
+  background: var(--surface);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 2rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.db-type-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 122, 255, 0.2);
+}
+
+.db-type-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.db-type-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Step 2: Configuration */
+.form-step {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.selected-db-type {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 2px solid var(--primary);
+}
+
+.db-icon-large {
+  font-size: 3rem;
+}
+
+.selected-db-type span:last-child {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btn-back {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.btn-back:hover {
+  background: var(--surface);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 @media (max-width: 768px) {
   .containers-grid {
     grid-template-columns: 1fr;
@@ -547,5 +637,18 @@ body {
   .modal-content {
     width: 95%;
     margin: 1rem;
+  }
+
+  .db-types-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+  }
+
+  .db-type-card {
+    padding: 1.5rem 0.5rem;
+  }
+
+  .db-type-icon {
+    font-size: 3rem;
   }
 }

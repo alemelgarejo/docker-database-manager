@@ -9,6 +9,79 @@ use std::collections::HashMap;
 use tauri::State;
 use tokio::sync::Mutex;
 
+// Enum para tipos de bases de datos
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum DatabaseType {
+    PostgreSQL,
+    MySQL,
+    MongoDB,
+    Redis,
+    MariaDB,
+}
+
+impl DatabaseType {
+    pub fn to_string(&self) -> String {
+        match self {
+            DatabaseType::PostgreSQL => "postgresql".to_string(),
+            DatabaseType::MySQL => "mysql".to_string(),
+            DatabaseType::MongoDB => "mongodb".to_string(),
+            DatabaseType::Redis => "redis".to_string(),
+            DatabaseType::MariaDB => "mariadb".to_string(),
+        }
+    }
+
+    pub fn get_icon(&self) -> &str {
+        match self {
+            DatabaseType::PostgreSQL => "🐘",
+            DatabaseType::MySQL => "🐬",
+            DatabaseType::MongoDB => "🍃",
+            DatabaseType::Redis => "🔴",
+            DatabaseType::MariaDB => "🦭",
+        }
+    }
+
+    pub fn get_default_port(&self) -> u16 {
+        match self {
+            DatabaseType::PostgreSQL => 5432,
+            DatabaseType::MySQL => 3306,
+            DatabaseType::MongoDB => 27017,
+            DatabaseType::Redis => 6379,
+            DatabaseType::MariaDB => 3306,
+        }
+    }
+
+    pub fn get_default_user(&self) -> &str {
+        match self {
+            DatabaseType::PostgreSQL => "postgres",
+            DatabaseType::MySQL => "root",
+            DatabaseType::MongoDB => "root",
+            DatabaseType::Redis => "",
+            DatabaseType::MariaDB => "root",
+        }
+    }
+
+    pub fn get_available_versions(&self) -> Vec<&str> {
+        match self {
+            DatabaseType::PostgreSQL => vec!["16", "15", "14", "13", "12"],
+            DatabaseType::MySQL => vec!["8.2", "8.0", "5.7"],
+            DatabaseType::MongoDB => vec!["7.0", "6.0", "5.0", "4.4"],
+            DatabaseType::Redis => vec!["7.2", "7.0", "6.2"],
+            DatabaseType::MariaDB => vec!["11.2", "10.11", "10.6"],
+        }
+    }
+
+    pub fn get_image_name(&self, version: &str) -> String {
+        match self {
+            DatabaseType::PostgreSQL => format!("postgres:{}", version),
+            DatabaseType::MySQL => format!("mysql:{}", version),
+            DatabaseType::MongoDB => format!("mongo:{}", version),
+            DatabaseType::Redis => format!("redis:{}", version),
+            DatabaseType::MariaDB => format!("mariadb:{}", version),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DatabaseConfig {
     pub name: String,
@@ -16,6 +89,8 @@ pub struct DatabaseConfig {
     pub password: String,
     pub port: u16,
     pub version: String,
+    #[serde(rename = "type")]
+    pub db_type: DatabaseType,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +132,8 @@ pub struct ContainerInfo {
     pub port: String,
     pub created: String,
     pub database_name: String,
+    pub db_type: String,
+    pub db_icon: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -69,6 +146,17 @@ pub struct AppState {
     docker: Mutex<Docker>,
 }
 
+// Estructura para enviar info de tipos de BD al frontend
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatabaseTypeInfo {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub default_port: u16,
+    pub default_user: String,
+    pub versions: Vec<String>,
+}
+
 #[tauri::command]
 async fn check_docker(state: State<'_, AppState>) -> Result<bool, String> {
     let docker = state.docker.lock().await;
@@ -76,10 +164,38 @@ async fn check_docker(state: State<'_, AppState>) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn get_database_types() -> Result<Vec<DatabaseTypeInfo>, String> {
+    let types = vec![
+        DatabaseType::PostgreSQL,
+        DatabaseType::MySQL,
+        DatabaseType::MariaDB,
+        DatabaseType::MongoDB,
+        DatabaseType::Redis,
+    ];
+    
+    Ok(types.iter().map(|db_type| {
+        DatabaseTypeInfo {
+            id: db_type.to_string(),
+            name: match db_type {
+                DatabaseType::PostgreSQL => "PostgreSQL".to_string(),
+                DatabaseType::MySQL => "MySQL".to_string(),
+                DatabaseType::MongoDB => "MongoDB".to_string(),
+                DatabaseType::Redis => "Redis".to_string(),
+                DatabaseType::MariaDB => "MariaDB".to_string(),
+            },
+            icon: db_type.get_icon().to_string(),
+            default_port: db_type.get_default_port(),
+            default_user: db_type.get_default_user().to_string(),
+            versions: db_type.get_available_versions().iter().map(|v| v.to_string()).collect(),
+        }
+    }).collect())
+}
+
+#[tauri::command]
 async fn list_containers(state: State<'_, AppState>) -> Result<Vec<ContainerInfo>, String> {
     let docker = state.docker.lock().await;
     let mut filters = HashMap::new();
-    filters.insert("label".to_string(), vec!["app=postgres-manager".to_string()]);
+    filters.insert("label".to_string(), vec!["app=db-manager".to_string()]);
     
     let containers = docker.list_containers(Some(ListContainersOptions::<String> { all: true, filters, ..Default::default() }))
         .await.map_err(|e| e.to_string())?;
@@ -90,15 +206,17 @@ async fn list_containers(state: State<'_, AppState>) -> Result<Vec<ContainerInfo
         let status = c.state.as_ref().unwrap_or(&"unknown".to_string()).clone();
         let created = chrono::DateTime::from_timestamp(c.created.unwrap_or(0), 0).map(|dt| dt.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_default();
         let database_name = c.labels.as_ref().and_then(|l| l.get("database_name")).map(|s| s.clone()).unwrap_or_default();
+        let db_type = c.labels.as_ref().and_then(|l| l.get("db_type")).map(|s| s.clone()).unwrap_or("postgresql".to_string());
+        let db_icon = c.labels.as_ref().and_then(|l| l.get("db_icon")).map(|s| s.clone()).unwrap_or("🐘".to_string());
         
-        ContainerInfo { id: c.id.as_ref().unwrap_or(&String::new()).clone(), name, status, port, created, database_name }
+        ContainerInfo { id: c.id.as_ref().unwrap_or(&String::new()).clone(), name, status, port, created, database_name, db_type, db_icon }
     }).collect())
 }
 
 #[tauri::command]
 async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> Result<String, String> {
     let docker = state.docker.lock().await;
-    let image = format!("postgres:{}", config.version);
+    let image = config.db_type.get_image_name(&config.version);
     
     // Validar que el puerto no esté en uso
     let containers = docker.list_containers(Some(ListContainersOptions::<String> { 
@@ -119,7 +237,7 @@ async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> 
     }
     
     // Validar que el nombre no esté en uso
-    let container_name = format!("postgres-{}", config.name);
+    let container_name = format!("{}-{}", config.db_type.to_string(), config.name);
     for container in &containers {
         if let Some(names) = &container.names {
             for name in names {
@@ -151,24 +269,129 @@ async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> 
         }
     }
     
-    let container_json = json!({
-        "Image": image,
-        "Env": [
-            format!("POSTGRES_USER={}", config.username), 
-            format!("POSTGRES_PASSWORD={}", config.password), 
-            format!("POSTGRES_DB={}", config.name)
-        ],
-        "ExposedPorts": {"5432/tcp": {}},
-        "HostConfig": {
-            "PortBindings": {
-                "5432/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
-            }
+    // Configurar según el tipo de base de datos
+    let container_json = match config.db_type {
+        DatabaseType::PostgreSQL => {
+            json!({
+                "Image": image,
+                "Env": [
+                    format!("POSTGRES_USER={}", config.username), 
+                    format!("POSTGRES_PASSWORD={}", config.password), 
+                    format!("POSTGRES_DB={}", config.name)
+                ],
+                "ExposedPorts": {"5432/tcp": {}},
+                "HostConfig": {
+                    "PortBindings": {
+                        "5432/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
+                    }
+                },
+                "Labels": {
+                    "app": "db-manager", 
+                    "database_name": config.name.clone(),
+                    "db_type": config.db_type.to_string(),
+                    "db_icon": config.db_type.get_icon()
+                }
+            })
         },
-        "Labels": {
-            "app": "postgres-manager", 
-            "database_name": config.name.clone()
-        }
-    });
+        DatabaseType::MySQL => {
+            json!({
+                "Image": image,
+                "Env": [
+                    format!("MYSQL_ROOT_PASSWORD={}", config.password),
+                    format!("MYSQL_DATABASE={}", config.name),
+                    format!("MYSQL_USER={}", config.username),
+                    format!("MYSQL_PASSWORD={}", config.password),
+                ],
+                "ExposedPorts": {"3306/tcp": {}},
+                "HostConfig": {
+                    "PortBindings": {
+                        "3306/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
+                    }
+                },
+                "Labels": {
+                    "app": "db-manager",
+                    "database_name": config.name.clone(),
+                    "db_type": config.db_type.to_string(),
+                    "db_icon": config.db_type.get_icon()
+                }
+            })
+        },
+        DatabaseType::MariaDB => {
+            json!({
+                "Image": image,
+                "Env": [
+                    format!("MARIADB_ROOT_PASSWORD={}", config.password),
+                    format!("MARIADB_DATABASE={}", config.name),
+                    format!("MARIADB_USER={}", config.username),
+                    format!("MARIADB_PASSWORD={}", config.password),
+                ],
+                "ExposedPorts": {"3306/tcp": {}},
+                "HostConfig": {
+                    "PortBindings": {
+                        "3306/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
+                    }
+                },
+                "Labels": {
+                    "app": "db-manager",
+                    "database_name": config.name.clone(),
+                    "db_type": config.db_type.to_string(),
+                    "db_icon": config.db_type.get_icon()
+                }
+            })
+        },
+        DatabaseType::MongoDB => {
+            let env = if !config.username.is_empty() && !config.password.is_empty() {
+                vec![
+                    format!("MONGO_INITDB_ROOT_USERNAME={}", config.username),
+                    format!("MONGO_INITDB_ROOT_PASSWORD={}", config.password),
+                    format!("MONGO_INITDB_DATABASE={}", config.name),
+                ]
+            } else {
+                vec![]
+            };
+            
+            json!({
+                "Image": image,
+                "Env": env,
+                "ExposedPorts": {"27017/tcp": {}},
+                "HostConfig": {
+                    "PortBindings": {
+                        "27017/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
+                    }
+                },
+                "Labels": {
+                    "app": "db-manager",
+                    "database_name": config.name.clone(),
+                    "db_type": config.db_type.to_string(),
+                    "db_icon": config.db_type.get_icon()
+                }
+            })
+        },
+        DatabaseType::Redis => {
+            let cmd = if !config.password.is_empty() {
+                vec!["redis-server", "--requirepass", &config.password]
+            } else {
+                vec!["redis-server"]
+            };
+            
+            json!({
+                "Image": image,
+                "Cmd": cmd,
+                "ExposedPorts": {"6379/tcp": {}},
+                "HostConfig": {
+                    "PortBindings": {
+                        "6379/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
+                    }
+                },
+                "Labels": {
+                    "app": "db-manager",
+                    "database_name": config.name.clone(),
+                    "db_type": config.db_type.to_string(),
+                    "db_icon": config.db_type.get_icon()
+                }
+            })
+        },
+    };
     
     let container_config: Config<String> = serde_json::from_value(container_json)
         .map_err(|e| format!("Error en configuración: {}", e))?;
@@ -184,7 +407,7 @@ async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> 
     docker.start_container(&container.id, None::<StartContainerOptions<String>>)
         .await.map_err(|e| format!("Error iniciando contenedor: {}", e))?;
     
-    Ok(format!("BD '{}' creada en puerto {}", config.name, config.port))
+    Ok(format!("{} '{}' creada en puerto {}", config.db_type.get_icon(), config.name, config.port))
 }
 
 #[tauri::command]
@@ -296,7 +519,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState { docker: Mutex::new(docker) })
-        .invoke_handler(tauri::generate_handler![check_docker, list_containers, create_database, start_container, stop_container, restart_container, remove_container, get_logs, exec_sql, backup_db])
+        .invoke_handler(tauri::generate_handler![check_docker, get_database_types, list_containers, create_database, start_container, stop_container, restart_container, remove_container, get_logs, exec_sql, backup_db])
         .run(tauri::generate_context!())
         .expect("error running app");
 }
