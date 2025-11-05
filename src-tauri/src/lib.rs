@@ -43,7 +43,7 @@ impl DatabaseType {
 
     pub fn get_default_port(&self) -> u16 {
         match self {
-            DatabaseType::PostgreSQL => 5432,
+            DatabaseType::PostgreSQL => 5544,
             DatabaseType::MySQL => 3306,
             DatabaseType::MongoDB => 27017,
             DatabaseType::Redis => 6379,
@@ -63,7 +63,7 @@ impl DatabaseType {
 
     pub fn get_available_versions(&self) -> Vec<&str> {
         match self {
-            DatabaseType::PostgreSQL => vec!["16", "15", "14", "13", "12"],
+            DatabaseType::PostgreSQL => vec!["15", "16", "14", "13", "12"],
             DatabaseType::MySQL => vec!["8.2", "8.0", "5.7"],
             DatabaseType::MongoDB => vec!["7.0", "6.0", "5.0", "4.4"],
             DatabaseType::Redis => vec!["7.2", "7.0", "6.2"],

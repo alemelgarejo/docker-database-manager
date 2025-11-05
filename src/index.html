@@ -5,6 +5,7 @@
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Docker Database Manager</title>
+    <script type="module" src="/icons.js"></script>
     <script type="module" src="/main.js?v=9999999999" defer></script>
   </head>
 
@@ -12,18 +13,24 @@
     <div class="app-container">
       <!-- Header -->
       <header class="header">
-        <h1>🗄️ Database Manager</h1>
+        <h1>Database Manager</h1>
         <div class="header-actions">
-          <button id="refresh-btn" class="btn btn-secondary">🔄 Actualizar</button>
-          <button id="new-db-btn" class="btn btn-primary">➕ Nueva base de datos</button>
+          <button id="refresh-btn" class="btn btn-ghost">Refresh</button>
+          <button id="new-db-btn" class="btn btn-primary">
+            New Database
+          </button>
         </div>
       </header>
 
       <!-- Docker Status -->
       <div class="status-bar">
-        <span id="docker-status">Verificando Docker...</span>
-        <button onclick="window.checkUpdatesManually()" class="update-btn" title="Verificar actualizaciones">
-          🔄 Actualizar App
+        <span id="docker-status">Checking Docker...</span>
+        <button
+          onclick="window.checkUpdatesManually()"
+          class="update-btn"
+          title="Check for updates"
+        >
+          Check Updates
         </button>
       </div>
 
@@ -31,12 +38,12 @@
       <main class="main-content">
         <!-- Containers List -->
         <section class="containers-section">
-          <h2>Bases de datos</h2>
+          <h2>Databases</h2>
           <div id="containers-list" class="containers-grid">
             <!-- Containers will be loaded here -->
           </div>
-          <div id="no-containers" class="no-data" style="display: none;">
-            <p>No hay bases de datos creadas. ¡Crea una nueva!</p>
+          <div id="no-containers" class="no-data" style="display: none">
+            <p>No databases created yet. Create your first one!</p>
           </div>
         </section>
       </main>
@@ -45,57 +52,83 @@
       <div id="create-modal" class="modal">
         <div class="modal-content">
           <div class="modal-header">
-            <h2 id="modal-title">Crear nueva base de datos</h2>
-            <button class="close-btn" onclick="closeCreateModal()">✕</button>
+            <h2 id="modal-title">Create New Database</h2>
+            <button class="close-btn" onclick="closeCreateModal()">×</button>
           </div>
           <form id="create-form" class="modal-body">
             <!-- Step 1: Select Database Type -->
             <div id="step-1" class="form-step">
-              <h3>Selecciona el tipo de base de datos:</h3>
+              <h3>Select database type:</h3>
               <div id="db-types-grid" class="db-types-grid">
                 <!-- Database types will be loaded here -->
               </div>
             </div>
 
             <!-- Step 2: Configure Database -->
-            <div id="step-2" class="form-step" style="display: none;">
-              <button type="button" class="btn-back" onclick="goBackToStep1()">← Volver</button>
-              
+            <div id="step-2" class="form-step" style="display: none">
+              <button
+                type="button"
+                class="btn-back"
+                onclick="goBackToStep1()"
+              ></button>
+
               <div class="selected-db-type">
                 <span id="selected-db-icon" class="db-icon-large"></span>
                 <span id="selected-db-name"></span>
               </div>
 
               <div class="form-group">
-                <label for="db-name">Nombre de la base de datos:</label>
-                <input type="text" id="db-name" required placeholder="mi_database" />
+                <label for="db-name">Database Name:</label>
+                <input
+                  type="text"
+                  id="db-name"
+                  required
+                  placeholder="my_database"
+                />
               </div>
 
               <div class="form-group" id="username-group">
-                <label for="db-username">Usuario:</label>
-                <input type="text" id="db-username" placeholder="usuario" />
+                <label for="db-username">Username:</label>
+                <input type="text" id="db-username" placeholder="user" />
               </div>
 
               <div class="form-group" id="password-group">
-                <label for="db-password">Contraseña:</label>
-                <input type="password" id="db-password" placeholder="••••••••" />
+                <label for="db-password">Password:</label>
+                <input
+                  type="password"
+                  id="db-password"
+                  placeholder="••••••••"
+                />
               </div>
 
               <div class="form-group">
-                <label for="db-port">Puerto:</label>
-                <input type="number" id="db-port" required placeholder="5432" min="1024" max="65535" />
+                <label for="db-port">Port:</label>
+                <input
+                  type="number"
+                  id="db-port"
+                  required
+                  placeholder="5544"
+                  min="1024"
+                  max="65535"
+                />
               </div>
 
               <div class="form-group">
-                <label for="db-version">Versión:</label>
+                <label for="db-version">Version:</label>
                 <select id="db-version" required>
                   <!-- Versions will be loaded dynamically -->
                 </select>
               </div>
 
               <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancelar</button>
-                <button type="submit" class="btn btn-primary">Crear</button>
+                <button
+                  type="button"
+                  class="btn btn-ghost"
+                  onclick="closeCreateModal()"
+                >
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">Create</button>
               </div>
             </div>
           </form>
@@ -106,16 +139,18 @@
       <div id="logs-modal" class="modal">
         <div class="modal-content modal-large">
           <div class="modal-header">
-            <h2>Logs del contenedor</h2>
-            <button class="close-btn" onclick="closeLogsModal()">✕</button>
+            <h2>Container Logs</h2>
+            <button class="close-btn" onclick="closeLogsModal()">×</button>
           </div>
           <div class="modal-body">
             <div id="logs-content" class="logs-container">
-              <p>Cargando logs...</p>
+              <p>Loading logs...</p>
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeLogsModal()">Cerrar</button>
+            <button class="btn btn-ghost" onclick="closeLogsModal()">
+              Close
+            </button>
           </div>
         </div>
       </div>
@@ -124,20 +159,24 @@
       <div id="sql-modal" class="modal">
         <div class="modal-content modal-large">
           <div class="modal-header">
-            <h2>Consola SQL</h2>
-            <button class="close-btn" onclick="closeSqlModal()">✕</button>
+            <h2>SQL Console</h2>
+            <button class="close-btn" onclick="closeSqlModal()">×</button>
           </div>
           <div class="modal-body">
             <form id="sql-form">
               <div class="form-group">
-                <label for="sql-query">Consulta SQL:</label>
-                <textarea id="sql-query" rows="6" placeholder="SELECT * FROM tabla;"></textarea>
+                <label for="sql-query">SQL Query:</label>
+                <textarea
+                  id="sql-query"
+                  rows="6"
+                  placeholder="SELECT * FROM table;"
+                ></textarea>
               </div>
-              <button type="submit" class="btn btn-primary">Ejecutar</button>
+              <button type="submit" class="btn btn-primary">Execute</button>
             </form>
             <div id="sql-result" class="sql-result">
-              <h3>Resultado:</h3>
-              <pre id="sql-output">Los resultados aparecerán aquí...</pre>
+              <h3>Result:</h3>
+              <pre id="sql-output">Results will appear here...</pre>
             </div>
           </div>
         </div>
@@ -145,9 +184,9 @@
     </div>
 
     <!-- Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+    <div id="loading-overlay" class="loading-overlay" style="display: none">
       <div class="spinner"></div>
-      <p>Cargando...</p>
+      <p>Loading...</p>
     </div>
   </body>
 </html>

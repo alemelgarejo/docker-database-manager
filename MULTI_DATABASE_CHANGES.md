@@ -24,7 +24,7 @@ pub enum DatabaseType {
 **Métodos implementados:**
 - `to_string()` - Convierte a string
 - `get_icon()` - Retorna emoji del tipo (🐘 🐬 🍃 🔴 🦭)
-- `get_default_port()` - Puerto por defecto (5432, 3306, 27017, 6379, etc.)
+- `get_default_port()` - Puerto por defecto (5544, 3306, 27017, 6379, etc.)
 - `get_default_user()` - Usuario por defecto (postgres, root, etc.)
 - `get_available_versions()` - Versiones disponibles para cada tipo
 - `get_image_name()` - Nombre de la imagen Docker
@@ -81,7 +81,7 @@ Ahora crea contenedores según el tipo de base de datos:
 **PostgreSQL:**
 ```rust
 - Env: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
-- Puerto: 5432
+- Puerto: 5544
 ```
 
 **MySQL:**
@@ -295,7 +295,7 @@ const config = {
 ## 🔧 Configuraciones por Tipo
 
 ### PostgreSQL (🐘)
-- **Puerto**: 5432
+- **Puerto**: 5544
 - **Usuario**: postgres
 - **Versiones**: 16, 15, 14, 13, 12
 - **Requeridos**: Todos los campos

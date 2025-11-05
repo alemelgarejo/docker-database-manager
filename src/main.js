@@ -1,3 +1,6 @@
+// Import icons
+import { getIcon } from './icons.js';
+
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
   return new Promise((resolve) => {
@@ -120,12 +123,11 @@ function showNotification(message, type = 'success') {
 async function checkDocker() {
   try {
     await invoke('check_docker');
-    document.getElementById('docker-status').textContent =
-      '✅ Docker conectado';
+    document.getElementById('docker-status').textContent = 'Docker Connected';
     return true;
   } catch (_e) {
     document.getElementById('docker-status').textContent =
-      '❌ Docker no conectado';
+      'Docker Disconnected';
     return false;
   }
 }
@@ -151,38 +153,38 @@ async function loadContainers() {
         return `
       <div class="container-card">
         <div class="container-header">
-          <h3 class="container-title">${c.db_icon} ${c.name}</h3>
+          <h3 class="container-title">${c.name}</h3>
           <span class="status-badge status-${c.status}">${c.status}</span>
         </div>
         <div class="container-info">
-          <div class="info-row"><span class="info-label">Tipo:</span><span>${dbTypeName}</span></div>
-          <div class="info-row"><span class="info-label">BD:</span><span>${c.database_name}</span></div>
-          <div class="info-row"><span class="info-label">Puerto:</span><span>${c.port}</span></div>
+          <div class="info-row"><span class="info-label">Type:</span><span>${dbTypeName}</span></div>
+          <div class="info-row"><span class="info-label">Database:</span><span>${c.database_name}</span></div>
+          <div class="info-row"><span class="info-label">Port:</span><span>${c.port}</span></div>
           <div class="info-row"><span class="info-label">ID:</span><span title="${c.id}">${shortId}</span></div>
-          <div class="info-row"><span class="info-label">Creado:</span><span>${c.created}</span></div>
+          <div class="info-row"><span class="info-label">Created:</span><span>${c.created}</span></div>
         </div>
         <div class="container-actions">
           ${
             c.status === 'running'
               ? `
-            <button class="btn btn-warning btn-sm" onclick="stopC('${c.id}')">⏸️ Detener</button>
-            <button class="btn btn-primary btn-sm" onclick="showLogs('${c.id}')">📋 Logs</button>
+            <button class="btn btn-warning btn-sm" onclick="stopC('${c.id}')">${getIcon('stop')} Stop</button>
+            <button class="btn btn-secondary btn-sm" onclick="showLogs('${c.id}')">${getIcon('fileText')} Logs</button>
             ${
               c.db_type === 'postgresql' ||
               c.db_type === 'mysql' ||
               c.db_type === 'mariadb'
                 ? `
-              <button class="btn btn-success btn-sm" onclick="showSQL('${c.id}','${c.database_name}')">💻 SQL</button>
+              <button class="btn btn-success btn-sm" onclick="showSQL('${c.id}','${c.database_name}')">${getIcon('terminal')} SQL</button>
             `
                 : ''
             }
           `
               : `
-            <button class="btn btn-success btn-sm" onclick="startC('${c.id}')">▶️ Iniciar</button>
+            <button class="btn btn-success btn-sm" onclick="startC('${c.id}')">${getIcon('play')} Start</button>
           `
           }
-          <button class="btn btn-secondary btn-sm" onclick="restartC('${c.id}')">🔄</button>
-          <button class="btn btn-danger btn-sm" onclick="removeC('${c.id}')">🗑️</button>
+          <button class="btn btn-ghost btn-sm" onclick="restartC('${c.id}')">${getIcon('rotateCw')} Restart</button>
+          <button class="btn btn-danger btn-sm" onclick="removeC('${c.id}')">${getIcon('trash')} Delete</button>
         </div>
       </div>
     `;
@@ -336,6 +338,18 @@ async function loadDatabaseTypes() {
   }
 }
 
+// Helper para obtener el icono SVG de la base de datos
+function getDbIcon(type) {
+  const iconMap = {
+    postgresql: 'postgresql',
+    mysql: 'mysql',
+    mongodb: 'mongodb',
+    redis: 'redis',
+    mariadb: 'mariadb',
+  };
+  return getIcon(iconMap[type.id] || 'database');
+}
+
 // Mostrar paso 1: Selección de tipo de BD
 function showStep1() {
   document.getElementById('step-1').style.display = 'block';
@@ -345,8 +359,8 @@ function showStep1() {
   grid.innerHTML = databaseTypes
     .map(
       (type) => `
-    <div class="db-type-card" onclick="selectDatabaseType('${type.id}')">
-      <div class="db-type-icon">${type.icon}</div>
+    <div class="db-type-card" data-db-type="${type.id}" onclick="selectDatabaseType('${type.id}')">
+      <div class="db-type-icon">${getDbIcon(type)}</div>
       <div class="db-type-name">${type.name}</div>
     </div>
   `,
@@ -363,9 +377,18 @@ function showStep2() {
   if (!dbType) return;
 
   // Actualizar encabezado
-  document.getElementById('selected-db-icon').textContent = dbType.icon;
+  document.getElementById('selected-db-icon').innerHTML = getDbIcon(dbType);
   document.getElementById('selected-db-name').textContent = dbType.name;
-  document.getElementById('modal-title').textContent = `Crear ${dbType.name}`;
+  document.getElementById('modal-title').textContent = `Create ${dbType.name}`;
+
+  // Añadir data attribute al contenedor seleccionado
+  const selectedDbTypeDiv = document.querySelector('.selected-db-type');
+  if (selectedDbTypeDiv) {
+    selectedDbTypeDiv.setAttribute('data-db-type', selectedDbType);
+  }
+
+  // Inyectar icono en botón back
+  updateBackButton();
 
   // Configurar valores por defecto
   document.getElementById('db-port').value = dbType.default_port;
@@ -421,6 +444,14 @@ window.goBackToStep1 = () => {
   document.getElementById('create-form').reset();
 };
 
+// Función helper para inyectar icono en botón back
+function updateBackButton() {
+  const backBtn = document.querySelector('.btn-back');
+  if (backBtn) {
+    backBtn.innerHTML = `${getIcon('arrowLeft')} <span>Back</span>`;
+  }
+}
+
 // Abrir modal de creación
 window.openCreateModal = () => {
   document.getElementById('create-modal').classList.add('active');
@@ -455,6 +486,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     relaunch = api.relaunch;
 
     console.log('✅ Tauri API inicializada');
+
+    // Inyectar iconos en botones del header
+    const refreshBtn = document.getElementById('refresh-btn');
+    const newDbBtn = document.getElementById('new-db-btn');
+    const updateBtn = document.querySelector('.update-btn');
+
+    if (refreshBtn) {
+      refreshBtn.innerHTML = `${getIcon('refresh')} <span>Refresh</span>`;
+    }
+    if (newDbBtn) {
+      newDbBtn.innerHTML = `${getIcon('plus')} <span>New Database</span>`;
+    }
+    if (updateBtn) {
+      updateBtn.innerHTML = `${getIcon('download')} <span>Check Updates</span>`;
+    }
 
     // Cargar tipos de bases de datos
     await loadDatabaseTypes();
