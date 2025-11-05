@@ -1,14 +1,41 @@
-const { invoke } = window.__TAURI__.core;
-const { check } = window.__TAURI__.plugin.updater;
-const { ask } = window.__TAURI__.plugin.dialog;
-const { relaunch } = window.__TAURI__.plugin.process;
+// Función para obtener la API de Tauri de forma segura
+function getTauriAPI() {
+  return new Promise((resolve) => {
+    const checkTauri = () => {
+      if (window.__TAURI__) {
+        const invoke = window.__TAURI__?.core?.invoke || window.__TAURI__?.invoke;
+        const check = window.__TAURI__?.plugin?.updater?.check;
+        const ask = window.__TAURI__?.plugin?.dialog?.ask;
+        const relaunch = window.__TAURI__?.plugin?.process?.relaunch;
+        
+        if (invoke) {
+          console.log('✅ Tauri API cargada correctamente');
+          resolve({ invoke, check, ask, relaunch });
+        } else {
+          setTimeout(checkTauri, 50);
+        }
+      } else {
+        setTimeout(checkTauri, 50);
+      }
+    };
+    checkTauri();
+  });
+}
 
-console.log('🔄 main.js v2 cargado - containerId y removeVolumes');
-console.log('✅ Versión CORRECTA del código cargada');
+// Variables globales para la API
+let invoke, check, ask, relaunch;
+
+console.log('🔄 main.js v3 cargado - conexión mejorada con Docker');
+console.log('✅ Esperando a que Tauri esté disponible...');
 
 // Función para verificar actualizaciones
 async function checkForUpdates(silent = true) {
   try {
+    if (!check) {
+      console.log('⚠️ Plugin de actualización no disponible');
+      return;
+    }
+    
     console.log('🔍 Verificando actualizaciones...');
     const update = await check();
     
@@ -52,12 +79,6 @@ async function checkForUpdates(silent = true) {
     }
   }
 }
-
-// Verificar actualizaciones al iniciar (silencioso)
-window.addEventListener('DOMContentLoaded', () => {
-  // Esperar 3 segundos después de cargar para verificar actualizaciones
-  setTimeout(() => checkForUpdates(true), 3000);
-});
 
 // Función para verificar actualizaciones manualmente
 window.checkUpdatesManually = () => checkForUpdates(false);
@@ -394,15 +415,44 @@ window.showLogs = showLogs;
 window.showSQL = showSQL;
 
 window.addEventListener('DOMContentLoaded', async () => {
-  // Cargar tipos de bases de datos
-  await loadDatabaseTypes();
-  
-  // Event listeners
-  document.getElementById('new-db-btn').onclick = openCreateModal;
-  document.getElementById('refresh-btn').onclick = loadContainers;
-  document.getElementById('create-form').onsubmit = createDB;
-  document.getElementById('sql-form').onsubmit = execSQL;
-  
-  if (await checkDocker()) await loadContainers();
-  setInterval(async () => { if (await checkDocker()) await loadContainers(); }, 10000);
+  try {
+    // Esperar a que Tauri esté disponible
+    const api = await getTauriAPI();
+    invoke = api.invoke;
+    check = api.check;
+    ask = api.ask;
+    relaunch = api.relaunch;
+    
+    console.log('✅ Tauri API inicializada');
+    
+    // Cargar tipos de bases de datos
+    await loadDatabaseTypes();
+    
+    // Event listeners
+    document.getElementById('new-db-btn').onclick = openCreateModal;
+    document.getElementById('refresh-btn').onclick = loadContainers;
+    document.getElementById('create-form').onsubmit = createDB;
+    document.getElementById('sql-form').onsubmit = execSQL;
+    
+    // Verificar Docker y cargar contenedores
+    if (await checkDocker()) {
+      await loadContainers();
+    } else {
+      console.error('❌ No se pudo conectar con Docker');
+      showNotification('No se pudo conectar con Docker. Asegúrate de que Docker Desktop esté corriendo.', 'error');
+    }
+    
+    // Actualizar cada 10 segundos
+    setInterval(async () => { 
+      if (await checkDocker()) {
+        await loadContainers(); 
+      }
+    }, 10000);
+    
+    // Verificar actualizaciones después de 3 segundos
+    setTimeout(() => checkForUpdates(true), 3000);
+  } catch (error) {
+    console.error('❌ Error al inicializar la aplicación:', error);
+    alert('Error al inicializar la aplicación. Por favor, reinicia la aplicación.');
+  }
 });
