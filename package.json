@@ -2,7 +2,7 @@
   "name": "docker-db-manager",
   "private": true,
   "version": "0.1.0",
-  "description": "Docker PostgreSQL Database Manager for macOS",
+  "description": "Docker Database Manager - Multi-database management tool for macOS",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
@@ -14,5 +14,23 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
+  },
+  "keywords": [
+    "docker",
+    "database",
+    "postgresql",
+    "mysql",
+    "mongodb",
+    "redis",
+    "database-management",
+    "macos",
+    "tauri",
+    "rust"
+  ],
+  "author": "alemelgarejo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alemelgarejo/docker-database-manager.git"
   }
 }

@@ -294,6 +294,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState { docker: Mutex::new(docker) })
         .invoke_handler(tauri::generate_handler![check_docker, list_containers, create_database, start_container, stop_container, restart_container, remove_container, get_logs, exec_sql, backup_db])
         .run(tauri::generate_context!())
