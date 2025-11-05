@@ -249,6 +249,26 @@ docker-db-manager/
 
 Ver [BRANCH_PROTECTION_GUIDE.md](BRANCH_PROTECTION_GUIDE.md) para más detalles sobre el flujo de trabajo.
 
+### 📝 Estilo de Código
+
+Este proyecto utiliza [Biome](https://biomejs.dev/) para formateo y linting:
+
+```bash
+# Formatear código
+pnpm format
+
+# Verificar formato
+pnpm format:check
+
+# Ejecutar linting
+pnpm lint
+
+# Corregir problemas automáticamente
+pnpm check
+```
+
+Ver [BIOME_CONFIG.md](BIOME_CONFIG.md) para más detalles sobre la configuración de Biome.
+
 ## 📝 Licencia
 
 MIT License - Ver [LICENSE](LICENSE) para más detalles.
