@@ -36,14 +36,141 @@
 
       <!-- Main Content -->
       <main class="main-content">
-        <!-- Containers List -->
-        <section class="containers-section">
-          <h2>Databases</h2>
-          <div id="containers-list" class="containers-grid">
-            <!-- Containers will be loaded here -->
+        <!-- Tabs Navigation -->
+        <nav class="tabs-nav">
+          <button
+            class="tab-btn active"
+            data-tab="databases"
+            onclick="switchTab('databases')"
+          >
+            <span class="tab-icon"></span>
+            <span>Databases</span>
+          </button>
+          <button
+            class="tab-btn"
+            data-tab="migration"
+            onclick="switchTab('migration')"
+          >
+            <span class="tab-icon"></span>
+            <span>Local DB Migration</span>
+          </button>
+        </nav>
+
+        <!-- Tab: Databases -->
+        <section id="tab-databases" class="tab-content active">
+          <div class="containers-section">
+            <h2>Docker Databases</h2>
+            <div id="containers-list" class="containers-grid">
+              <!-- Containers will be loaded here -->
+            </div>
+            <div id="no-containers" class="no-data" style="display: none">
+              <p>No databases created yet. Create your first one!</p>
+            </div>
           </div>
-          <div id="no-containers" class="no-data" style="display: none">
-            <p>No databases created yet. Create your first one!</p>
+        </section>
+
+        <!-- Tab: Migration -->
+        <section id="tab-migration" class="tab-content">
+          <div class="migration-section">
+            <h2>Local Database Migration</h2>
+            <p class="section-description">
+              Migrate your local PostgreSQL databases to Docker containers
+            </p>
+
+            <!-- Connection Status -->
+            <div id="local-postgres-status" class="connection-status">
+              <div class="status-indicator">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">Checking local PostgreSQL...</span>
+              </div>
+              <button
+                id="refresh-local-btn"
+                class="btn btn-ghost btn-sm"
+                onclick="checkLocalPostgres()"
+              ></button>
+            </div>
+
+            <!-- Connection Form -->
+            <div id="connection-form" class="connection-form" style="display: none">
+              <h3>Connect to Local PostgreSQL</h3>
+              <p class="form-help-text">
+                Enter your local PostgreSQL credentials to list and migrate databases
+              </p>
+              <form id="local-pg-form" onsubmit="connectLocalPostgres(event)">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="local-host">Host:</label>
+                    <input
+                      type="text"
+                      id="local-host"
+                      value="localhost"
+                      required
+                      placeholder="localhost"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="local-port">Port:</label>
+                    <input
+                      type="number"
+                      id="local-port"
+                      value="5432"
+                      required
+                      min="1024"
+                      max="65535"
+                      placeholder="5432"
+                    />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="local-user">User:</label>
+                    <input 
+                      type="text" 
+                      id="local-user" 
+                      value="postgres" 
+                      required 
+                      placeholder="postgres"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="local-password">Password:</label>
+                    <input 
+                      type="password" 
+                      id="local-password" 
+                      placeholder="Leave empty if no password"
+                    />
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                  Connect & Load Databases
+                </button>
+              </form>
+            </div>
+
+            <!-- Local Databases List -->
+            <div id="local-databases-container" style="display: none">
+              <h3>Available Local Databases</h3>
+              <div id="local-databases-list" class="local-databases-grid">
+                <!-- Local databases will be loaded here -->
+              </div>
+              <div id="no-local-databases" class="no-data" style="display: none">
+                <p>No databases found in local PostgreSQL</p>
+              </div>
+            </div>
+
+            <!-- Migrated Databases List -->
+            <div id="migrated-databases-container" style="display: none">
+              <h3>Migrated Databases</h3>
+              <p class="section-description">
+                These databases have been migrated from local PostgreSQL to Docker
+              </p>
+              <div id="migrated-databases-list" class="local-databases-grid">
+                <!-- Migrated databases will be loaded here -->
+              </div>
+              <div id="no-migrated-databases" class="no-data" style="display: none">
+                <p>No databases have been migrated yet</p>
+              </div>
+            </div>
           </div>
         </section>
       </main>
