@@ -1,7 +1,66 @@
 const { invoke } = window.__TAURI__.core;
+const { check } = window.__TAURI__.plugin.updater;
+const { ask } = window.__TAURI__.plugin.dialog;
+const { relaunch } = window.__TAURI__.plugin.process;
 
 console.log('🔄 main.js v2 cargado - containerId y removeVolumes');
 console.log('✅ Versión CORRECTA del código cargada');
+
+// Función para verificar actualizaciones
+async function checkForUpdates(silent = true) {
+  try {
+    console.log('🔍 Verificando actualizaciones...');
+    const update = await check();
+    
+    if (update?.available) {
+      console.log('✨ Nueva versión disponible:', update.version);
+      
+      const shouldUpdate = await ask(
+        `¡Nueva versión ${update.version} disponible!\n\n¿Deseas actualizar ahora?`,
+        {
+          title: 'Actualización Disponible',
+          kind: 'info'
+        }
+      );
+
+      if (shouldUpdate) {
+        showNotification('Descargando actualización...', 'info');
+        await update.downloadAndInstall();
+        
+        const shouldRelaunch = await ask(
+          'Actualización completada. ¿Reiniciar la aplicación ahora?',
+          {
+            title: 'Actualización Completada',
+            kind: 'info'
+          }
+        );
+
+        if (shouldRelaunch) {
+          await relaunch();
+        }
+      }
+    } else {
+      console.log('✅ La aplicación está actualizada');
+      if (!silent) {
+        showNotification('La aplicación está actualizada', 'success');
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error al verificar actualizaciones:', error);
+    if (!silent) {
+      showNotification('Error al verificar actualizaciones', 'error');
+    }
+  }
+}
+
+// Verificar actualizaciones al iniciar (silencioso)
+window.addEventListener('DOMContentLoaded', () => {
+  // Esperar 3 segundos después de cargar para verificar actualizaciones
+  setTimeout(() => checkForUpdates(true), 3000);
+});
+
+// Función para verificar actualizaciones manualmente
+window.checkUpdatesManually = () => checkForUpdates(false);
 
 // TEST: Verificar que las funciones están correctas
 window.testRemove = async (id) => {

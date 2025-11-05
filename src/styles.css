@@ -65,9 +65,36 @@ body {
   border-bottom: 1px solid var(--border-color);
   color: var(--text-secondary);
   padding: 0.75rem 2rem;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-weight: 500;
   font-size: 0.9rem;
+}
+
+.update-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.update-btn:hover {
+  background: #0066cc;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+.update-btn:active {
+  transform: translateY(0);
 }
 
 .main-content {
