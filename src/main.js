@@ -150,24 +150,66 @@ async function loadContainers() {
         const shortId = c.id.substring(0, 12);
         const dbTypeName =
           c.db_type.charAt(0).toUpperCase() + c.db_type.slice(1);
+
+        // Obtener icono según tipo de BD
+        const dbIconMap = {
+          postgresql: 'postgresql',
+          mysql: 'mysql',
+          mongodb: 'mongodb',
+          redis: 'redis',
+          mariadb: 'mariadb',
+        };
+        const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
+
         return `
-      <div class="container-card">
+      <div class="container-card" data-db-type="${c.db_type}">
         <div class="container-header">
-          <h3 class="container-title">${c.name}</h3>
+          <div class="container-title-section">
+            <div class="db-icon-badge">${dbIcon}</div>
+            <div class="container-title-content">
+              <h3 class="container-title">${c.name}</h3>
+              <span class="container-subtitle">${dbTypeName}</span>
+            </div>
+          </div>
           <span class="status-badge status-${c.status}">${c.status}</span>
         </div>
+        
         <div class="container-info">
-          <div class="info-row"><span class="info-label">Type:</span><span>${dbTypeName}</span></div>
-          <div class="info-row"><span class="info-label">Database:</span><span>${c.database_name}</span></div>
-          <div class="info-row"><span class="info-label">Port:</span><span>${c.port}</span></div>
-          <div class="info-row"><span class="info-label">ID:</span><span title="${c.id}">${shortId}</span></div>
-          <div class="info-row"><span class="info-label">Created:</span><span>${c.created}</span></div>
+          <div class="info-row">
+            <span class="info-icon">${getIcon('chartBar')}</span>
+            <div class="info-content">
+              <span class="info-label">Database</span>
+              <span class="info-value">${c.database_name}</span>
+            </div>
+          </div>
+          <div class="info-row">
+            <span class="info-icon">${getIcon('plug')}</span>
+            <div class="info-content">
+              <span class="info-label">Port</span>
+              <span class="info-value">${c.port}</span>
+            </div>
+          </div>
+          <div class="info-row">
+            <span class="info-icon">${getIcon('hash')}</span>
+            <div class="info-content">
+              <span class="info-label">Container ID</span>
+              <span class="info-value" title="${c.id}">${shortId}</span>
+            </div>
+          </div>
+          <div class="info-row">
+            <span class="info-icon">${getIcon('calendar')}</span>
+            <div class="info-content">
+              <span class="info-label">Created</span>
+              <span class="info-value">${c.created}</span>
+            </div>
+          </div>
         </div>
+        
         <div class="container-actions">
           ${
             c.status === 'running'
               ? `
-            <button class="btn btn-warning btn-sm" onclick="stopC('${c.id}')">${getIcon('stop')} Stop</button>
+            <button class="btn btn-warning btn-sm" onclick="stopC('${c.id}')">${getIcon('pause')} Stop</button>
             <button class="btn btn-secondary btn-sm" onclick="showLogs('${c.id}')">${getIcon('fileText')} Logs</button>
             ${
               c.db_type === 'postgresql' ||
@@ -183,8 +225,8 @@ async function loadContainers() {
             <button class="btn btn-success btn-sm" onclick="startC('${c.id}')">${getIcon('play')} Start</button>
           `
           }
-          <button class="btn btn-ghost btn-sm" onclick="restartC('${c.id}')">${getIcon('rotateCw')} Restart</button>
-          <button class="btn btn-danger btn-sm" onclick="removeC('${c.id}')">${getIcon('trash')} Delete</button>
+          <button class="btn btn-ghost btn-sm" onclick="restartC('${c.id}')">${getIcon('rotateCw')}</button>
+          <button class="btn btn-danger btn-sm" onclick="removeC('${c.id}')">${getIcon('trash')}</button>
         </div>
       </div>
     `;
@@ -491,6 +533,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const refreshBtn = document.getElementById('refresh-btn');
     const newDbBtn = document.getElementById('new-db-btn');
     const updateBtn = document.querySelector('.update-btn');
+    const refreshLocalBtn = document.getElementById('refresh-local-btn');
 
     if (refreshBtn) {
       refreshBtn.innerHTML = `${getIcon('refresh')} <span>Refresh</span>`;
@@ -501,6 +544,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (updateBtn) {
       updateBtn.innerHTML = `${getIcon('download')} <span>Check Updates</span>`;
     }
+    if (refreshLocalBtn) {
+      refreshLocalBtn.innerHTML = `${getIcon('refresh')} <span>Refresh</span>`;
+    }
+
+    // Inyectar iconos en tabs
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach((btn) => {
+      const tabName = btn.getAttribute('data-tab');
+      const iconName = tabName === 'databases' ? 'database' : 'package';
+      const text = btn.querySelector('span:last-child')?.textContent || '';
+      if (text) {
+        btn.innerHTML = `<span class="tab-icon">${getIcon(iconName)}</span><span>${text}</span>`;
+      }
+    });
 
     // Cargar tipos de bases de datos
     await loadDatabaseTypes();
@@ -538,3 +595,286 @@ window.addEventListener('DOMContentLoaded', async () => {
     );
   }
 });
+
+// ===== TAB SYSTEM =====
+window.switchTab = (tabName) => {
+  // Update tab buttons
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.classList.remove('active');
+  });
+  document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+
+  // Update tab content
+  document.querySelectorAll('.tab-content').forEach((content) => {
+    content.classList.remove('active');
+  });
+  document.getElementById(`tab-${tabName}`)?.classList.add('active');
+
+  // If switching to migration tab, check local postgres
+  if (tabName === 'migration') {
+    checkLocalPostgres();
+    loadMigratedDatabases();
+  }
+};
+
+// ===== LOCAL POSTGRES MIGRATION =====
+let localPostgresConfig = null;
+
+async function checkLocalPostgres() {
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const connectionForm = document.getElementById('connection-form');
+  const databasesContainer = document.getElementById(
+    'local-databases-container',
+  );
+
+  statusDot.className = 'status-dot checking';
+  statusText.textContent = 'Checking local PostgreSQL...';
+  databasesContainer.style.display = 'none';
+
+  try {
+    // Try to detect local postgres
+    const detected = await invoke('detect_local_postgres');
+
+    if (detected) {
+      statusDot.className = 'status-dot connected';
+      statusText.textContent = `PostgreSQL detected on ${detected.host}:${detected.port} - Enter credentials to connect`;
+      connectionForm.style.display = 'block';
+
+      // Pre-fill detected values
+      document.getElementById('local-host').value = detected.host;
+      document.getElementById('local-port').value = detected.port;
+    } else {
+      statusDot.className = 'status-dot disconnected';
+      statusText.textContent =
+        'Local PostgreSQL not detected - Enter connection details manually';
+      connectionForm.style.display = 'block';
+    }
+  } catch (error) {
+    console.error('Error detecting local postgres:', error);
+    statusDot.className = 'status-dot disconnected';
+    statusText.textContent =
+      'Could not auto-detect - Enter connection details manually';
+    connectionForm.style.display = 'block';
+  }
+}
+
+async function connectLocalPostgres(e) {
+  e.preventDefault();
+  showLoading();
+
+  const config = {
+    host: document.getElementById('local-host').value,
+    port: parseInt(document.getElementById('local-port').value, 10),
+    user: document.getElementById('local-user').value,
+    password: document.getElementById('local-password').value,
+  };
+
+  try {
+    const result = await invoke('connect_local_postgres', { config });
+    localPostgresConfig = config;
+
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
+    statusDot.className = 'status-dot connected';
+    statusText.textContent = `Connected to PostgreSQL at ${config.host}:${config.port}`;
+
+    showNotification('Connected to local PostgreSQL', 'success');
+
+    // Load databases after successful connection
+    await loadLocalDatabases();
+  } catch (error) {
+    showNotification(`Connection failed: ${error}`, 'error');
+
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    statusDot.className = 'status-dot disconnected';
+    statusText.textContent = 'Connection failed - Check credentials';
+  } finally {
+    hideLoading();
+  }
+}
+
+async function loadLocalDatabases() {
+  const list = document.getElementById('local-databases-list');
+  const noData = document.getElementById('no-local-databases');
+  const container = document.getElementById('local-databases-container');
+
+  try {
+    const databases = await invoke('list_local_databases', {
+      config: localPostgresConfig,
+    });
+
+    if (!databases.length) {
+      list.innerHTML = '';
+      noData.style.display = 'block';
+      container.style.display = 'block';
+      return;
+    }
+
+    noData.style.display = 'none';
+    container.style.display = 'block';
+
+    list.innerHTML = databases
+      .map(
+        (db) => `
+      <div class="local-db-card">
+        <div class="local-db-header">
+          <span class="local-db-icon">${getIcon('database')}</span>
+          <h3 class="local-db-name">${db.name}</h3>
+        </div>
+        <div class="local-db-info">
+          <div class="local-db-info-row">
+            <span class="local-db-info-label">Size:</span>
+            <span class="local-db-info-value">${db.size || 'Unknown'}</span>
+          </div>
+          <div class="local-db-info-row">
+            <span class="local-db-info-label">Owner:</span>
+            <span class="local-db-info-value">${db.owner || 'Unknown'}</span>
+          </div>
+          <div class="local-db-info-row">
+            <span class="local-db-info-label">Tables:</span>
+            <span class="local-db-info-value">${db.tables || 'Unknown'}</span>
+          </div>
+        </div>
+        <div class="local-db-actions">
+          <button 
+            class="btn btn-primary btn-sm" 
+            onclick="startMigration('${db.name}')"
+          >
+            ${getIcon('play')} Migrate to Docker
+          </button>
+        </div>
+      </div>
+    `,
+      )
+      .join('');
+  } catch (error) {
+    showNotification(`Error loading databases: ${error}`, 'error');
+  }
+}
+
+async function startMigration(dbName) {
+  if (
+    !confirm(
+      `Migrate database "${dbName}" to Docker?\n\nThis will create a new Docker container with a copy of your database.`,
+    )
+  ) {
+    return;
+  }
+
+  showLoading();
+
+  try {
+    const result = await invoke('migrate_database', {
+      config: localPostgresConfig,
+      databaseName: dbName,
+    });
+
+    showNotification(`Database "${dbName}" migrated successfully!`, 'success');
+
+    // Reload both lists
+    await loadLocalDatabases();
+    await loadMigratedDatabases();
+    await loadContainers();
+  } catch (error) {
+    showNotification(`Migration failed: ${error}`, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function loadMigratedDatabases() {
+  const list = document.getElementById('migrated-databases-list');
+  const noData = document.getElementById('no-migrated-databases');
+  const container = document.getElementById('migrated-databases-container');
+
+  try {
+    const databases = await invoke('get_migrated_databases');
+
+    if (!databases.length) {
+      list.innerHTML = '';
+      noData.style.display = 'block';
+      container.style.display = 'none';
+      return;
+    }
+
+    noData.style.display = 'none';
+    container.style.display = 'block';
+
+    list.innerHTML = databases
+      .map(
+        (db) => `
+      <div class="local-db-card migrated-db-card">
+        <div class="local-db-header">
+          <span class="local-db-icon">${getIcon('check')}</span>
+          <h3 class="local-db-name">${db.original_name}</h3>
+        </div>
+        <div class="local-db-info">
+          <div class="local-db-info-row">
+            <span class="local-db-info-label">Container:</span>
+            <span class="local-db-info-value">${db.container_name}</span>
+          </div>
+          <div class="local-db-info-row">
+            <span class="local-db-info-label">Migrated:</span>
+            <span class="local-db-info-value">${new Date(db.migrated_at).toLocaleString()}</span>
+          </div>
+          <div class="local-db-info-row">
+            <span class="local-db-info-label">Status:</span>
+            <span class="local-db-info-value" style="color: var(--success)">Running in Docker</span>
+          </div>
+        </div>
+        <div class="local-db-actions">
+          <button 
+            class="btn btn-danger btn-sm" 
+            onclick="removeMigratedDatabase('${db.container_id}')"
+          >
+            ${getIcon('trash')} Delete Container
+          </button>
+          <button 
+            class="btn btn-ghost btn-sm" 
+            onclick="switchTab('databases')"
+          >
+            ${getIcon('eye')} View in Databases
+          </button>
+        </div>
+      </div>
+    `,
+      )
+      .join('');
+  } catch (error) {
+    console.error('Error loading migrated databases:', error);
+  }
+}
+
+async function removeMigratedDatabase(containerId) {
+  if (
+    !confirm(
+      'Delete this migrated database container?\n\nThis will remove the container and all its data.',
+    )
+  ) {
+    return;
+  }
+
+  showLoading();
+
+  try {
+    await invoke('remove_migrated_database', { containerId });
+    showNotification('Migrated database removed successfully', 'success');
+
+    // Reload all lists
+    await loadMigratedDatabases();
+    await loadContainers();
+  } catch (error) {
+    showNotification(`Error removing database: ${error}`, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+window.checkLocalPostgres = checkLocalPostgres;
+window.connectLocalPostgres = connectLocalPostgres;
+window.startMigration = startMigration;
+window.removeMigratedDatabase = removeMigratedDatabase;
+window.startMigration = startMigration;

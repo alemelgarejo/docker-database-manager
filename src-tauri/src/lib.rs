@@ -554,7 +554,26 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState { docker: Mutex::new(docker) })
-        .invoke_handler(tauri::generate_handler![check_docker, get_database_types, list_containers, create_database, start_container, stop_container, restart_container, remove_container, get_logs, exec_sql, backup_db])
+        .manage(MigrationState { migrated: Mutex::new(Vec::new()) })
+        .invoke_handler(tauri::generate_handler![
+            check_docker, 
+            get_database_types, 
+            list_containers, 
+            create_database, 
+            start_container, 
+            stop_container, 
+            restart_container, 
+            remove_container, 
+            get_logs, 
+            exec_sql, 
+            backup_db,
+            detect_local_postgres,
+            connect_local_postgres,
+            list_local_databases,
+            migrate_database,
+            get_migrated_databases,
+            remove_migrated_database
+        ])
         .run(tauri::generate_context!())
         .expect("error running app");
 }
@@ -1253,4 +1272,370 @@ mod tests {
         // Este test solo verifica que podemos consultar imágenes
         // (siempre retorna algo, aunque sea vacío)
     }
+}
+
+// ============================================================================
+// LOCAL POSTGRES MIGRATION
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LocalPostgresConfig {
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LocalDatabase {
+    pub name: String,
+    pub size: String,
+    pub owner: String,
+    pub tables: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MigratedDatabase {
+    pub original_name: String,
+    pub container_id: String,
+    pub container_name: String,
+    pub migrated_at: String,
+    pub size: String,
+}
+
+// State para tracking de migraciones
+pub struct MigrationState {
+    pub migrated: Mutex<Vec<MigratedDatabase>>,
+}
+
+#[tauri::command]
+async fn detect_local_postgres() -> Result<serde_json::Value, String> {
+    // Intenta detectar PostgreSQL local en puertos comunes
+    let common_ports = vec![5432, 5433];
+    
+    for port in common_ports {
+        if check_postgres_port("localhost", port, "postgres", "").await {
+            return Ok(json!({
+                "host": "localhost",
+                "port": port,
+                "detected": true
+            }));
+        }
+    }
+    
+    Err("No local PostgreSQL detected".to_string())
+}
+
+async fn check_postgres_port(host: &str, port: u16, user: &str, password: &str) -> bool {
+    println!("Attempting to connect to PostgreSQL:");
+    println!("  Host: {}", host);
+    println!("  Port: {}", port);
+    println!("  User: {}", user);
+    
+    let connection_string = if password.is_empty() {
+        format!("host={} port={} user={}", host, port, user)
+    } else {
+        format!("host={} port={} user={} password={}", host, port, user, password)
+    };
+    
+    match tokio_postgres::connect(&connection_string, tokio_postgres::NoTls).await {
+        Ok((client, connection)) => {
+            // Spawn connection handler
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    eprintln!("Connection error: {}", e);
+                }
+            });
+            
+            // Test query
+            match client.query("SELECT 1", &[]).await {
+                Ok(_) => {
+                    println!("✓ Connection successful");
+                    true
+                }
+                Err(e) => {
+                    println!("✗ Query failed: {}", e);
+                    false
+                }
+            }
+        }
+        Err(e) => {
+            println!("✗ Connection failed: {}", e);
+            false
+        }
+    }
+}
+
+#[tauri::command]
+async fn connect_local_postgres(config: LocalPostgresConfig) -> Result<String, String> {
+    println!("connect_local_postgres called");
+    if check_postgres_port(&config.host, config.port, &config.user, &config.password).await {
+        Ok("Connected successfully".to_string())
+    } else {
+        Err("Failed to connect to PostgreSQL. Check: 1) PostgreSQL is running, 2) Credentials are correct, 3) Host/Port are correct".to_string())
+    }
+}
+
+#[tauri::command]
+async fn list_local_databases(config: LocalPostgresConfig) -> Result<Vec<LocalDatabase>, String> {
+    println!("list_local_databases called");
+    
+    let connection_string = if config.password.is_empty() {
+        format!("host={} port={} user={} dbname=postgres", config.host, config.port, config.user)
+    } else {
+        format!("host={} port={} user={} password={} dbname=postgres", config.host, config.port, config.user, config.password)
+    };
+    
+    let (client, connection) = tokio_postgres::connect(&connection_string, tokio_postgres::NoTls)
+        .await
+        .map_err(|e| format!("Failed to connect: {}", e))?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    // Query to get database info
+    let query = r#"
+        SELECT 
+            d.datname as name,
+            pg_size_pretty(pg_database_size(d.datname)) as size,
+            u.usename as owner
+        FROM pg_database d
+        JOIN pg_user u ON d.datdba = u.usesysid
+        WHERE d.datistemplate = false
+        AND d.datname NOT IN ('postgres', 'template0', 'template1')
+        ORDER BY d.datname
+    "#;
+    
+    let rows = client.query(query, &[])
+        .await
+        .map_err(|e| format!("Query failed: {}", e))?;
+    
+    let mut databases = Vec::new();
+    
+    for row in rows {
+        databases.push(LocalDatabase {
+            name: row.get(0),
+            size: row.get(1),
+            owner: row.get(2),
+            tables: 0, // We'll calculate this separately if needed
+        });
+    }
+    
+    println!("Found {} databases", databases.len());
+    Ok(databases)
+}
+
+#[tauri::command]
+async fn migrate_database(
+    config: LocalPostgresConfig,
+    database_name: String,
+    docker_state: State<'_, AppState>,
+    migration_state: State<'_, MigrationState>,
+) -> Result<String, String> {
+    use std::process::Command;
+    use std::fs;
+    
+    let docker = docker_state.docker.lock().await;
+    
+    // 1. Crear dump de la base de datos local
+    let dump_path = format!("/tmp/{}_dump.sql", database_name);
+    
+    println!("Creating dump of database: {}", database_name);
+    
+    let dump_output = Command::new("pg_dump")
+        .arg("-h")
+        .arg(&config.host)
+        .arg("-p")
+        .arg(config.port.to_string())
+        .arg("-U")
+        .arg(&config.user)
+        .arg("-d")
+        .arg(&database_name)
+        .arg("-F")
+        .arg("c")
+        .arg("-f")
+        .arg(&dump_path)
+        .env("PGPASSWORD", &config.password)
+        .output()
+        .map_err(|e| format!("Failed to create dump: {}", e))?;
+    
+    if !dump_output.status.success() {
+        return Err(format!("pg_dump error: {}", String::from_utf8_lossy(&dump_output.stderr)));
+    }
+    
+    println!("Dump created successfully at: {}", dump_path);
+    
+    // 2. Buscar puerto disponible
+    let mut port = 5544;
+    let containers = docker.list_containers(Some(ListContainersOptions::<String> {
+        all: true,
+        ..Default::default()
+    })).await.map_err(|e| format!("Failed to list containers: {}", e))?;
+    
+    let used_ports: Vec<u16> = containers.iter()
+        .filter_map(|c| {
+            c.ports.as_ref()?.iter()
+                .filter_map(|p| p.public_port.map(|port| port as u16))
+                .next()
+        })
+        .collect();
+    
+    while used_ports.contains(&port) {
+        port += 1;
+    }
+    
+    println!("Using port: {}", port);
+    
+    // 3. Crear contenedor Docker
+    let container_name = format!("migrated-{}", database_name);
+    let image = "postgres:15";
+    
+    // Pull image si no existe
+    println!("Pulling image: {}", image);
+    let mut stream = docker.create_image(
+        Some(CreateImageOptions {
+            from_image: image,
+            ..Default::default()
+        }),
+        None,
+        None,
+    );
+    
+    while let Some(_) = stream.next().await {}
+    
+    // Crear contenedor
+    // Crear volumen Docker persistente
+    let volume_name = format!("{}_data", container_name);
+    
+    let container_json = json!({
+        "Image": image,
+        "Env": [
+            format!("POSTGRES_USER={}", config.user),
+            format!("POSTGRES_PASSWORD={}", config.password),
+            format!("POSTGRES_DB={}", database_name)
+        ],
+        "ExposedPorts": {"5432/tcp": {}},
+        "HostConfig": {
+            "PortBindings": {
+                "5432/tcp": [{"HostPort": port.to_string(), "HostIp": "0.0.0.0"}]
+            },
+            "Binds": [
+                format!("{}:/var/lib/postgresql/data", volume_name)
+            ]
+        },
+        "Labels": {
+            "app": "docker-db-manager",
+            "database_name": database_name.clone(),
+            "migrated": "true",
+            "original_source": "local",
+            "volume": volume_name.clone()
+        }
+    });
+    
+    println!("Creating container with persistent volume: {}", volume_name);
+    
+    let container_config: Config<String> = serde_json::from_value(container_json)
+        .map_err(|e| format!("Failed to create config: {}", e))?;
+    
+    let container = docker.create_container(
+        Some(CreateContainerOptions {
+            name: container_name.clone(),
+            ..Default::default()
+        }),
+        container_config,
+    ).await.map_err(|e| format!("Failed to create container: {}", e))?;
+    
+    println!("Container created: {}", container.id);
+    
+    // Iniciar contenedor
+    docker.start_container(&container.id, None::<StartContainerOptions<String>>)
+        .await.map_err(|e| format!("Failed to start container: {}", e))?;
+    
+    println!("Container started, waiting for PostgreSQL to be ready...");
+    
+    // Esperar a que PostgreSQL esté listo
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    
+    // 4. Restaurar dump en el nuevo contenedor
+    println!("Restoring dump to new container...");
+    
+    let restore_output = Command::new("pg_restore")
+        .arg("-h")
+        .arg("localhost")
+        .arg("-p")
+        .arg(port.to_string())
+        .arg("-U")
+        .arg(&config.user)
+        .arg("-d")
+        .arg(&database_name)
+        .arg("--no-owner")
+        .arg("--no-acl")
+        .arg(&dump_path)
+        .env("PGPASSWORD", &config.password)
+        .output()
+        .map_err(|e| format!("Failed to restore dump: {}", e))?;
+    
+    if !restore_output.status.success() {
+        let stderr = String::from_utf8_lossy(&restore_output.stderr);
+        // pg_restore puede tener warnings pero aún así funcionar
+        if !stderr.contains("ERROR") {
+            println!("Restore completed with warnings: {}", stderr);
+        } else {
+            return Err(format!("pg_restore error: {}", stderr));
+        }
+    }
+    
+    println!("Restore completed successfully");
+    
+    // 5. Limpiar archivo dump
+    let _ = fs::remove_file(&dump_path);
+    
+    // 6. Guardar en tracking de migraciones
+    let migrated_db = MigratedDatabase {
+        original_name: database_name.clone(),
+        container_id: container.id.clone(),
+        container_name: container_name.clone(),
+        migrated_at: chrono::Utc::now().to_rfc3339(),
+        size: "Unknown".to_string(), // Se puede calcular después
+    };
+    
+    migration_state.migrated.lock().await.push(migrated_db);
+    
+    Ok(format!("Database '{}' migrated successfully to container '{}'", database_name, container_name))
+}
+
+#[tauri::command]
+async fn get_migrated_databases(migration_state: State<'_, MigrationState>) -> Result<Vec<MigratedDatabase>, String> {
+    let migrated = migration_state.migrated.lock().await;
+    Ok(migrated.clone())
+}
+
+#[tauri::command]
+async fn remove_migrated_database(
+    container_id: String,
+    migration_state: State<'_, MigrationState>,
+    docker_state: State<'_, AppState>,
+) -> Result<String, String> {
+    let docker = docker_state.docker.lock().await;
+    
+    // Detener y eliminar contenedor
+    let _ = docker.stop_container(&container_id, None).await;
+    
+    docker.remove_container(
+        &container_id,
+        Some(RemoveContainerOptions {
+            v: true,
+            force: true,
+            ..Default::default()
+        }),
+    ).await.map_err(|e| format!("Failed to remove container: {}", e))?;
+    
+    // Eliminar del tracking
+    let mut migrated = migration_state.migrated.lock().await;
+    migrated.retain(|db| db.container_id != container_id);
+    
+    Ok("Migrated database removed successfully".to_string())
 }
