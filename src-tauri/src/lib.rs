@@ -510,9 +510,44 @@ async fn backup_db(state: State<'_, AppState>, container_id: String, database: S
     Ok(file)
 }
 
+// Función helper para conectar a Docker con múltiples intentos
+fn connect_docker() -> Result<Docker, String> {
+    // Intento 1: Defaults (funciona en Linux y algunas configuraciones de macOS)
+    if let Ok(docker) = Docker::connect_with_local_defaults() {
+        println!("✅ Conectado a Docker con defaults");
+        return Ok(docker);
+    }
+
+    // Intento 2: Socket específico de macOS Docker Desktop
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/user".to_string());
+        let socket_path = format!("{}/.docker/run/docker.sock", home);
+        
+        if let Ok(docker) = Docker::connect_with_socket(&socket_path, 120, bollard::API_DEFAULT_VERSION) {
+            println!("✅ Conectado a Docker en: {}", socket_path);
+            return Ok(docker);
+        }
+    }
+
+    // Intento 3: Socket Unix estándar
+    if let Ok(docker) = Docker::connect_with_socket("/var/run/docker.sock", 120, bollard::API_DEFAULT_VERSION) {
+        println!("✅ Conectado a Docker en: /var/run/docker.sock");
+        return Ok(docker);
+    }
+
+    // Intento 4: HTTP local (Docker Desktop en Windows/Mac a veces usa esto)
+    if let Ok(docker) = Docker::connect_with_http("http://localhost:2375", 120, bollard::API_DEFAULT_VERSION) {
+        println!("✅ Conectado a Docker en: http://localhost:2375");
+        return Ok(docker);
+    }
+
+    Err("No se pudo conectar a Docker. Asegúrate de que Docker Desktop está corriendo.".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let docker = Docker::connect_with_local_defaults().expect("Docker no disponible");
+    let docker = connect_docker().expect("Docker no disponible. Por favor, inicia Docker Desktop y vuelve a intentar.");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
