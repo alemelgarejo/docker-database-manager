@@ -10,9 +10,15 @@
     "build": "tauri build",
     "clean": "rm -rf node_modules src-tauri/target",
     "test": "cd src-tauri && cargo test --lib -- --nocapture --test-threads=1",
-    "test:watch": "cd src-tauri && cargo watch -x 'test --lib -- --nocapture --test-threads=1'"
+    "test:watch": "cd src-tauri && cargo watch -x 'test --lib -- --nocapture --test-threads=1'",
+    "lint": "biome lint ./src",
+    "lint:fix": "biome lint --write ./src",
+    "format": "biome format --write ./src",
+    "format:check": "biome check ./src",
+    "check": "biome check --write ./src"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.3",
     "@tauri-apps/cli": "^2"
   },
   "keywords": [

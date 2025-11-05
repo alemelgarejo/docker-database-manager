@@ -14,8 +14,10 @@
   --border-color: #2d3748;
   --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.4);
-  
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+    Cantarell, sans-serif;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -39,7 +41,11 @@ body {
 }
 
 .header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--primary-color) 0%,
+    var(--secondary-color) 100%
+  );
   padding: 1.2rem 2rem;
   border-bottom: 2px solid rgba(255, 255, 255, 0.1);
   display: flex;
@@ -234,12 +240,20 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  background: linear-gradient(
+    135deg,
+    var(--primary-color),
+    var(--secondary-color)
+  );
   color: white;
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, var(--primary-hover), var(--secondary-hover));
+  background: linear-gradient(
+    135deg,
+    var(--primary-hover),
+    var(--secondary-hover)
+  );
 }
 
 .btn-secondary {
@@ -305,8 +319,12 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .modal-content {
@@ -342,7 +360,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(135deg, rgba(0, 77, 152, 0.1), rgba(165, 0, 68, 0.1));
+  background: linear-gradient(
+    135deg,
+    rgba(0, 77, 152, 0.1),
+    rgba(165, 0, 68, 0.1)
+  );
 }
 
 .modal-header h2 {
@@ -420,7 +442,7 @@ body {
 
 .form-group textarea {
   resize: vertical;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
 }
 
 .logs-container {
@@ -429,7 +451,7 @@ body {
   padding: 1rem;
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
   font-size: 0.8rem;
   line-height: 1.6;
   max-height: 400px;
@@ -453,7 +475,7 @@ body {
   border: 1px solid var(--border-color);
   padding: 1rem;
   border-radius: 8px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
   font-size: 0.8rem;
   line-height: 1.6;
   max-height: 300px;
@@ -499,7 +521,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-overlay p {
@@ -525,6 +549,96 @@ body {
   background: var(--primary-color);
 }
 
+/* Database Type Selection */
+.db-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.db-type-card {
+  background: var(--surface);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 2rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.db-type-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 122, 255, 0.2);
+}
+
+.db-type-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.db-type-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Step 2: Configuration */
+.form-step {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.selected-db-type {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 2px solid var(--primary);
+}
+
+.db-icon-large {
+  font-size: 3rem;
+}
+
+.selected-db-type span:last-child {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btn-back {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.btn-back:hover {
+  background: var(--surface);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 @media (max-width: 768px) {
   .containers-grid {
     grid-template-columns: 1fr;
@@ -547,5 +661,18 @@ body {
   .modal-content {
     width: 95%;
     margin: 1rem;
+  }
+
+  .db-types-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+  }
+
+  .db-type-card {
+    padding: 1.5rem 0.5rem;
+  }
+
+  .db-type-icon {
+    font-size: 3rem;
   }
 }
