@@ -13,10 +13,23 @@
     <div class="app-container">
       <!-- Header -->
       <header class="header">
-        <h1>Database Manager</h1>
+        <h1>
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align: middle; margin-right: 8px;">
+            <rect x="3" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+            <rect x="7" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+            <rect x="11" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+            <rect x="7" y="4" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+            <rect x="11" y="4" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+            <rect x="15" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
+            <path d="M19 11c0.5-0.5 1.5-0.5 2-0.2 0.5 0.3 1 1 1 1.7 0 1.5-1 2.5-2 2.5H4c-1.5 0-3-1.2-3-3s1.5-3 3-3c0-2.5 2-4.5 4.5-4.5 1.5 0 2.8 0.7 3.5 1.8" stroke="currentColor" fill="none"/>
+          </svg>
+          Docker Database Manager
+        </h1>
         <div class="header-actions">
-          <button id="refresh-btn" class="btn btn-ghost">Refresh</button>
-          <button id="new-db-btn" class="btn btn-primary">
+          <button id="refresh-btn" class="btn btn-ghost" data-tooltip="Refresh">
+            Refresh
+          </button>
+          <button id="new-db-btn" class="btn btn-primary" data-tooltip="New Database">
             New Database
           </button>
         </div>
@@ -24,13 +37,13 @@
 
       <!-- Docker Status -->
       <div class="status-bar">
-        <span id="docker-status">Checking Docker...</span>
+        <span id="docker-status"></span>
         <button
           onclick="window.checkUpdatesManually()"
           class="update-btn"
-          title="Check for updates"
+          data-tooltip="Check for updates"
         >
-          Check Updates
+          <span>Check Updates</span>
         </button>
       </div>
 
@@ -40,6 +53,14 @@
         <nav class="tabs-nav">
           <button
             class="tab-btn active"
+            data-tab="dashboard"
+            onclick="switchTab('dashboard')"
+          >
+            <span class="tab-icon"></span>
+            <span>Dashboard</span>
+          </button>
+          <button
+            class="tab-btn"
             data-tab="databases"
             onclick="switchTab('databases')"
           >
@@ -48,23 +69,139 @@
           </button>
           <button
             class="tab-btn"
+            data-tab="images"
+            onclick="switchTab('images')"
+          >
+            <span class="tab-icon"></span>
+            <span>Images</span>
+          </button>
+          <button
+            class="tab-btn"
             data-tab="migration"
             onclick="switchTab('migration')"
           >
             <span class="tab-icon"></span>
-            <span>Local DB Migration</span>
+            <span>Migration</span>
           </button>
         </nav>
 
-        <!-- Tab: Databases -->
-        <section id="tab-databases" class="tab-content active">
+        <!-- Tab: Dashboard -->
+        <section id="tab-dashboard" class="tab-content active">
           <div class="containers-section">
-            <h2>Docker Databases</h2>
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Total Containers</span>
+                  <span class="stat-value" id="stat-total">0</span>
+                </div>
+              </div>
+
+              <div class="stat-card stat-running">
+                <div class="stat-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Running</span>
+                  <span class="stat-value" id="stat-running">0</span>
+                </div>
+              </div>
+
+              <div class="stat-card stat-stopped">
+                <div class="stat-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Stopped</span>
+                  <span class="stat-value" id="stat-stopped">0</span>
+                </div>
+              </div>
+
+              <div class="stat-card stat-images">
+                <div class="stat-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                </div>
+                <div class="stat-content">
+                  <span class="stat-label">Images</span>
+                  <span class="stat-value" id="stat-images">0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="dashboard-section">
+              <h2 class="section-title">Quick Actions</h2>
+              <div class="quick-actions">
+                <button class="quick-action-btn" onclick="openCreateModal()">
+                  <div class="quick-action-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                  </div>
+                  <span>New Database</span>
+                </button>
+
+                <button class="quick-action-btn" onclick="switchTab('databases')">
+                  <div class="quick-action-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+                  </div>
+                  <span>View All Databases</span>
+                </button>
+
+                <button class="quick-action-btn" onclick="switchTab('migration')">
+                  <div class="quick-action-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                  </div>
+                  <span>Migrate Database</span>
+                </button>
+
+                <button class="quick-action-btn" onclick="loadContainers()">
+                  <div class="quick-action-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                  </div>
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="dashboard-section">
+              <h2 class="section-title">Recent Containers</h2>
+              <div id="recent-containers" class="recent-containers">
+                <!-- Populated by JavaScript -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab: Databases -->
+        <section id="tab-databases" class="tab-content">
+          <div class="containers-section">
+            <h2 data-i18n="dockerDatabases">Docker Databases</h2>
             <div id="containers-list" class="containers-grid">
               <!-- Containers will be loaded here -->
             </div>
             <div id="no-containers" class="no-data" style="display: none">
-              <p>No databases created yet. Create your first one!</p>
+              <p data-i18n="noDatabasesCreated"></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab: Images -->
+        <section id="tab-images" class="tab-content">
+          <div class="containers-section">
+            <div class="section-header">
+              <h2 data-i18n="dockerImages">Docker Images</h2>
+              <button class="btn btn-secondary" onclick="loadImages()" data-tooltip="Refresh images list">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              </button>
+            </div>
+            <div id="images-list" class="images-grid">
+              <!-- Images will be loaded here -->
+            </div>
+            <div id="no-images" class="no-data" style="display: none">
+              <p data-i18n="noImagesDownloaded"></p>
             </div>
           </div>
         </section>
@@ -313,7 +450,7 @@
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="loading-overlay" style="display: none">
       <div class="spinner"></div>
-      <p>Loading...</p>
+      <p id="loading-text">Loading...</p>
     </div>
   </body>
 </html>
