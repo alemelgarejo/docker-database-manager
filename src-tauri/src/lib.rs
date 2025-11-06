@@ -216,6 +216,70 @@ async fn list_containers(state: State<'_, AppState>) -> Result<Vec<ContainerInfo
     }).collect())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImageInfo {
+    pub id: String,
+    pub tags: Vec<String>,
+    pub size: String,
+    pub created: String,
+}
+
+#[tauri::command]
+async fn list_images(state: State<'_, AppState>) -> Result<Vec<ImageInfo>, String> {
+    let docker = state.docker.lock().await;
+    
+    let images = docker.list_images::<String>(None)
+        .await.map_err(|e| e.to_string())?;
+
+    Ok(images.iter().filter_map(|img| {
+        // Filtrar solo imágenes de bases de datos
+        let tags = img.repo_tags.clone();
+        let has_db_tag = tags.iter().any(|tag| {
+            tag.contains("postgres") || 
+            tag.contains("mysql") || 
+            tag.contains("mongo") || 
+            tag.contains("redis") ||
+            tag.contains("mariadb")
+        });
+        
+        if !has_db_tag {
+            return None;
+        }
+        
+        let size_mb = img.size as f64 / 1_048_576.0; // Convertir a MB
+        let size = if size_mb > 1024.0 {
+            format!("{:.2} GB", size_mb / 1024.0)
+        } else {
+            format!("{:.0} MB", size_mb)
+        };
+        
+        let created = chrono::DateTime::from_timestamp(img.created, 0)
+            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_default();
+        
+        Some(ImageInfo {
+            id: img.id.clone(),
+            tags: tags,
+            size,
+            created,
+        })
+    }).collect())
+}
+
+#[tauri::command]
+async fn remove_image(state: State<'_, AppState>, image_id: String) -> Result<String, String> {
+    let docker = state.docker.lock().await;
+    
+    println!("🗑️ Eliminando imagen: {}", image_id);
+    
+    docker.remove_image(&image_id, None, None)
+        .await
+        .map_err(|e| format!("Error al eliminar imagen: {}", e))?;
+    
+    println!("✅ Imagen eliminada: {}", image_id);
+    Ok("Image removed successfully".to_string())
+}
+
 #[tauri::command]
 async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> Result<String, String> {
     println!("📦 Creando base de datos: {} ({})", config.name, config.db_type.to_string());
@@ -584,7 +648,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_docker, 
             get_database_types, 
-            list_containers, 
+            list_containers,
+            list_images,
+            remove_image,
             create_database, 
             start_container, 
             stop_container, 

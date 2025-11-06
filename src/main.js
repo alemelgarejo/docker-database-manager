@@ -13,7 +13,7 @@ function getTauriAPI() {
         const relaunch = window.__TAURI__?.plugin?.process?.relaunch;
 
         if (invoke) {
-          console.log('✅ Tauri API cargada correctamente');
+          console.log('[Tauri] API loaded successfully');
           resolve({ invoke, check, ask, relaunch });
         } else {
           setTimeout(checkTauri, 50);
@@ -29,8 +29,8 @@ function getTauriAPI() {
 // Variables globales para la API
 let invoke, check, ask, relaunch;
 
-console.log('🔄 main.js v3 cargado - conexión mejorada con Docker');
-console.log('✅ Esperando a que Tauri esté disponible...');
+console.log('[main.js] v3 loaded - improved Docker connection');
+console.log('[main.js] Waiting for Tauri to be available...');
 
 // Función para verificar actualizaciones
 async function checkForUpdates(silent = true) {
@@ -71,13 +71,13 @@ async function checkForUpdates(silent = true) {
         }
       }
     } else {
-      console.log('✅ La aplicación está actualizada');
+      console.log('[Update] App is up to date');
       if (!silent) {
         showNotification('La aplicación está actualizada', 'success');
       }
     }
   } catch (error) {
-    console.error('❌ Error al verificar actualizaciones:', error);
+    console.error('[Update] Error checking for updates:', error);
     if (!silent) {
       showNotification('Error al verificar actualizaciones', 'error');
     }
@@ -98,9 +98,9 @@ window.testRemove = async (id) => {
       containerId: String(id),
       removeVolumes: Boolean(true),
     });
-    console.log('✅ TEST EXITOSO:', result);
+    console.log('[Test] SUCCESS:', result);
   } catch (e) {
-    console.error('❌ TEST FALLÓ:', e);
+    console.error('[Test] FAILED:', e);
   }
 };
 
@@ -118,14 +118,14 @@ function showNotification(message, type = 'success') {
     success: '#10b981',
     error: '#dc2626',
     info: '#3b82f6',
-    warning: '#f59e0b'
+    warning: '#f59e0b',
   };
-  
+
   const notif = document.createElement('div');
   notif.style.cssText = `position:fixed;top:80px;right:20px;z-index:9999;background:${colors[type] || colors.success};color:white;padding:1rem 1.5rem;border-radius:8px;box-shadow:0 10px 20px rgba(0,0,0,0.3);max-width:400px;`;
   notif.textContent = message;
   document.body.appendChild(notif);
-  
+
   const duration = type === 'info' ? 5000 : 3000;
   setTimeout(() => notif.remove(), duration);
 }
@@ -169,7 +169,6 @@ async function loadContainers() {
           mariadb: 'mariadb',
         };
         const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
-
         return `
       <div class="db-card" data-db-type="${c.db_type}">
         <div class="db-card-header">
@@ -182,19 +181,19 @@ async function loadContainers() {
         </div>
         
         <div class="db-card-data">
-          <div class="db-data-item" onclick="copyToClipboard('${c.port}', 'Port copied!')" title="Click to copy">
+          <div class="db-data-item" onclick="copyToClipboard('${c.port}', 'Port copied!')" data-tooltip="Click to copy">
             <span class="db-data-label">Port</span>
             <span class="db-data-value">${c.port}</span>
           </div>
-          <div class="db-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" title="Click to copy">
+          <div class="db-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
             <span class="db-data-label">Container ID</span>
             <span class="db-data-value">${shortId}</span>
           </div>
-          <div class="db-data-item" onclick="copyToClipboard('${c.created}', 'Date copied!')" title="Click to copy">
+          <div class="db-data-item" onclick="copyToClipboard('${c.created}', 'Date copied!')" data-tooltip="Click to copy">
             <span class="db-data-label">Created</span>
             <span class="db-data-value">${c.created}</span>
           </div>
-          <div class="db-data-item" onclick="copyToClipboard('localhost:${c.port}', 'Connection copied!')" title="Click to copy">
+          <div class="db-data-item" onclick="copyToClipboard('localhost:${c.port}', 'Connection copied!')" data-tooltip="Click to copy">
             <span class="db-data-label">Connection</span>
             <span class="db-data-value">localhost:${c.port}</span>
           </div>
@@ -204,10 +203,10 @@ async function loadContainers() {
           ${
             c.status === 'running'
               ? `
-            <button class="db-action-btn db-btn-stop" onclick="stopC('${c.id}')" title="Stop container">
+            <button class="db-action-btn db-btn-stop" onclick="stopC('${c.id}')" data-tooltip="Stop container">
               ${getIcon('pause')}
             </button>
-            <button class="db-action-btn db-btn-logs" onclick="showLogs('${c.id}')" title="View logs">
+            <button class="db-action-btn db-btn-logs" onclick="showLogs('${c.id}')" data-tooltip="View logs">
               ${getIcon('fileText')}
             </button>
             ${
@@ -215,26 +214,26 @@ async function loadContainers() {
               c.db_type === 'mysql' ||
               c.db_type === 'mariadb'
                 ? `
-              <button class="db-action-btn db-btn-sql" onclick="showSQL('${c.id}','${c.database_name}')" title="Open SQL console">
+              <button class="db-action-btn db-btn-sql" onclick="showSQL('${c.id}','${c.database_name}')" data-tooltip="Open SQL console">
                 ${getIcon('terminal')}
               </button>
             `
                 : ''
             }
-            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" title="Restart container">
+            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
               ${getIcon('rotateCw')}
             </button>
           `
               : `
-            <button class="db-action-btn db-btn-start" onclick="startC('${c.id}')" title="Start container">
+            <button class="db-action-btn db-btn-start" onclick="startC('${c.id}')" data-tooltip="Start container">
               ${getIcon('play')}
             </button>
-            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" title="Restart container">
+            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
               ${getIcon('rotateCw')}
             </button>
           `
           }
-          <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name}')" title="Delete container">
+          <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name}')" data-tooltip="Delete container">
             ${getIcon('trash')}
           </button>
         </div>
@@ -250,61 +249,120 @@ async function loadContainers() {
 // ===== DASHBOARD =====
 async function loadDashboardStats() {
   try {
-    const containers = await invoke('list_containers');
+    console.log('Loading dashboard stats...');
+    const [containers, images] = await Promise.all([
+      invoke('list_containers'),
+      invoke('list_images')
+    ]);
+    
+    console.log('Containers loaded:', containers.length);
+    console.log('Images loaded:', images.length);
 
-    // Calcular estadísticas
-    const total = containers.length;
-    const running = containers.filter((c) => c.status === 'running').length;
-    const stopped = containers.filter((c) => c.status !== 'running').length;
+    // Calculate stats
+    const totalContainers = containers.length;
+    const runningContainers = containers.filter(
+      (c) => c.status === 'running',
+    ).length;
+    const stoppedContainers = containers.filter(
+      (c) => c.status !== 'running',
+    ).length;
+    const totalImages = images.length;
 
-    // Contar volúmenes únicos
-    const volumes = new Set();
-    containers.forEach((c) => {
-      if (c.volume) volumes.add(c.volume);
-    });
+    // Update stats
+    const statTotal = document.getElementById('stat-total');
+    const statRunning = document.getElementById('stat-running');
+    const statStopped = document.getElementById('stat-stopped');
+    const statImages = document.getElementById('stat-images');
 
-    // Actualizar UI
-    document.getElementById('stat-total').textContent = total;
-    document.getElementById('stat-running').textContent = running;
-    document.getElementById('stat-stopped').textContent = stopped;
-    document.getElementById('stat-volumes').textContent = volumes.size;
+    if (statTotal) {
+      statTotal.textContent = totalContainers;
+      console.log('Updated stat-total:', totalContainers);
+    } else {
+      console.error('Element #stat-total not found');
+    }
 
-    // Cargar contenedores recientes
+    if (statRunning) {
+      statRunning.textContent = runningContainers;
+      console.log('Updated stat-running:', runningContainers);
+    } else {
+      console.error('Element #stat-running not found');
+    }
+
+    if (statStopped) {
+      statStopped.textContent = stoppedContainers;
+      console.log('Updated stat-stopped:', stoppedContainers);
+    } else {
+      console.error('Element #stat-stopped not found');
+    }
+
+    if (statImages) {
+      statImages.textContent = totalImages;
+      console.log('Updated stat-images:', totalImages);
+    } else {
+      console.error('Element #stat-images not found');
+    }
+
+    // Load recent containers
     loadRecentContainers(containers);
   } catch (e) {
     console.error('Error loading dashboard stats:', e);
   }
 }
 
+
 function loadRecentContainers(containers) {
   const recentContainer = document.getElementById('recent-containers');
 
-  if (!containers || containers.length === 0) {
-    recentContainer.innerHTML =
-      '<div class="no-data"><p>No containers yet</p></div>';
+  if (!recentContainer) {
+    console.error('Element #recent-containers not found');
     return;
   }
 
-  // Mostrar últimos 5 contenedores
+  if (!containers || containers.length === 0) {
+    recentContainer.innerHTML =
+      '<div class="no-data"><p>No databases created yet. Create your first one!</p></div>';
+    console.log('No containers to show in recent');
+    return;
+  }
+
+  // Show last 5 containers
   const recent = containers.slice(0, 5);
+  console.log('Showing recent containers:', recent.length);
 
   recentContainer.innerHTML = recent
     .map((c) => {
-      const dbIconHtml = getIcon(c.db_type?.toLowerCase() || 'database');
+      const dbIconMap = {
+        postgresql: 'postgresql',
+        mysql: 'mysql',
+        mongodb: 'mongodb',
+        redis: 'redis',
+        mariadb: 'mariadb',
+      };
+      const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
       const statusClass = c.status === 'running' ? 'running' : 'stopped';
+      const statusIcon = c.status === 'running' ? getIcon('play') : getIcon('pause');
 
       return `
-      <div class="recent-container-item">
-        <div class="recent-container-info">
-          <div class="recent-container-icon">${dbIconHtml}</div>
-          <div class="recent-container-details">
-            <div class="recent-container-name">${c.name}</div>
-            <div class="recent-container-type">${c.db_type.toUpperCase()} • Port ${c.port}</div>
+      <div class="db-card" onclick="switchTab('databases')" style="cursor: pointer;">
+        <div class="db-card-header">
+          <div class="db-card-icon" data-db-type="${c.db_type}">
+            ${dbIcon}
+          </div>
+          <div class="db-card-title-section">
+            <h3 class="db-card-title">${c.name}</h3>
+            <span class="db-card-subtitle">${c.db_type.toUpperCase()}</span>
+          </div>
+          <div class="db-status db-status-${statusClass}">
+            ${statusIcon}
+            <span>${c.status}</span>
           </div>
         </div>
-        <div class="recent-container-status">
-          <div class="status-dot-small ${statusClass}"></div>
-          <span style="font-size: 0.813rem; color: var(--text-secondary)">${c.status}</span>
+        
+        <div class="db-card-info">
+          <div class="db-info-item">
+            <span class="db-info-label">Port</span>
+            <span class="db-info-value">${c.port}</span>
+          </div>
         </div>
       </div>
     `;
@@ -316,15 +374,17 @@ async function createDB(e) {
   e.preventDefault();
 
   if (!selectedDbType) {
-    showNotification('Selecciona un tipo de base de datos', 'error');
+    showNotification('Please select a database type', 'error');
     return;
   }
+  showLoading('creatingDatabase');
 
-  showLoading('Creating database...');
-  
   // Mostrar notificación informativa
-  showNotification('Creating database. First time may take 2-5 minutes to download the image...', 'info');
-  
+  showNotification(
+    'Creating database. First time may take 2-5 minutes to download the image...',
+    'info',
+  );
+
   try {
     const config = {
       name: document.getElementById('db-name').value,
@@ -336,18 +396,18 @@ async function createDB(e) {
     };
 
     console.log('Creating database with config:', config);
-    
+
     // Cambiar mensaje después de 3 segundos si sigue cargando
     const downloadTimer = setTimeout(() => {
-      showLoading('Downloading Docker image... This may take 2-5 minutes on first use.');
+      showLoading('downloadingImage');
     }, 3000);
-    
+
     const result = await invoke('create_database', { config: config });
-    
+
     clearTimeout(downloadTimer);
     console.log('Database created:', result);
 
-    showNotification(result, 'success');
+    showNotification('Database created successfully', 'success');
     window.closeCreateModal();
     await loadContainers();
     await loadDashboardStats(); // Actualizar dashboard también
@@ -364,8 +424,9 @@ async function startC(id) {
   showLoading();
   try {
     await invoke('start_container', { containerId: id });
-    showNotification('Iniciado');
+    showNotification('Container started', 'success');
     await loadContainers();
+    await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   } finally {
@@ -377,8 +438,9 @@ async function stopC(id) {
   showLoading();
   try {
     await invoke('stop_container', { containerId: id });
-    showNotification('Detenido');
+    showNotification('Container stopped', 'success');
     await loadContainers();
+    await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   } finally {
@@ -390,8 +452,9 @@ async function restartC(id) {
   showLoading();
   try {
     await invoke('restart_container', { containerId: id });
-    showNotification('Reiniciado');
+    showNotification('Container restarted', 'success');
     await loadContainers();
+    await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   } finally {
@@ -402,14 +465,17 @@ async function restartC(id) {
 // Función para copiar al portapapeles
 function copyToClipboard(text, message = 'Copied!') {
   // Intentar con la API moderna
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      showNotification(message, 'success');
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-      // Fallback
-      copyToClipboardFallback(text, message);
-    });
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        showNotification(message, 'success');
+      })
+      .catch((err) => {
+        console.error('Failed to copy:', err);
+        // Fallback
+        copyToClipboardFallback(text, message);
+      });
   } else {
     // Fallback para contextos sin HTTPS
     copyToClipboardFallback(text, message);
@@ -465,11 +531,11 @@ function confirmRemove(id, name) {
 async function executeRemove(id) {
   const checkbox = document.getElementById(`delete-volumes-${id}`);
   const removeVolumes = checkbox ? checkbox.checked : false;
-  
+
   // Cerrar modal
   document.querySelector('.confirm-modal')?.remove();
-  
-  showLoading('Deleting container...');
+
+  showLoading('deletingContainer');
   try {
     const result = await invoke('remove_container', {
       containerId: id,
@@ -486,8 +552,8 @@ async function executeRemove(id) {
 }
 
 async function removeC(id) {
-  if (!confirm('¿Eliminar contenedor?')) return;
-  const vols = confirm('¿Eliminar datos también?');
+  if (!confirm('Delete container?')) return;
+  const vols = confirm('Also delete volumes?');
   showLoading();
   try {
     const result = await invoke('remove_container', {
@@ -496,6 +562,7 @@ async function removeC(id) {
     });
     showNotification(result, 'success');
     await loadContainers();
+    await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   } finally {
@@ -698,6 +765,16 @@ window.copyToClipboard = copyToClipboard;
 window.confirmRemove = confirmRemove;
 window.executeRemove = executeRemove;
 
+// Función para cambiar idioma
+window.changeLanguage = (lang) => {
+  console.log('Changing language to:', lang);
+  showNotification(
+    `Language changed to ${lang === 'es' ? 'Español' : 'English'}`,
+    'success',
+  );
+  // TODO: Implementar i18n completo
+};
+
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     // Esperar a que Tauri esté disponible
@@ -707,9 +784,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     ask = api.ask;
     relaunch = api.relaunch;
 
-    console.log('✅ Tauri API inicializada');
+    console.log('[Tauri] API initialized');
 
-    // Inyectar iconos en botones del header
+    // APLICAR IDIOMA GUARDADO INMEDIATAMENTE    // Inyectar iconos en botones del header
     const refreshBtn = document.getElementById('refresh-btn');
     const newDbBtn = document.getElementById('new-db-btn');
     const updateBtn = document.querySelector('.update-btn');
@@ -735,6 +812,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       let iconName = 'database';
       if (tabName === 'dashboard') iconName = 'chartBar';
       else if (tabName === 'databases') iconName = 'database';
+      else if (tabName === 'images') iconName = 'package';
       else if (tabName === 'migration') iconName = 'package';
 
       const text = btn.querySelector('span:last-child')?.textContent || '';
@@ -748,18 +826,25 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Event listeners
     document.getElementById('new-db-btn').onclick = openCreateModal;
-    document.getElementById('refresh-btn').onclick = loadContainers;
+    document.getElementById('refresh-btn').onclick = async () => {
+      await loadContainers();
+      await loadDashboardStats();
+    };
     document.getElementById('create-form').onsubmit = createDB;
     document.getElementById('sql-form').onsubmit = execSQL;
 
     // Verificar Docker y cargar contenedores (NO BLOQUEAR LA UI)
     checkDocker()
-      .then((connected) => {
+      .then(async (connected) => {
         if (connected) {
-          loadContainers();
-          loadDashboardStats(); // Cargar dashboard también
+          console.log('✅ Docker connected, loading data...');
+          // Cargar dashboard primero ya que es la tab activa por defecto
+          await loadDashboardStats();
+          // Luego cargar containers para la tab databases
+          await loadContainers();
           document.getElementById('docker-status').textContent =
-            '✅ Docker conectado';
+            'Docker connected';
+          console.log('✅ Initial data loaded');
         } else {
           console.error('❌ No se pudo conectar con Docker');
           document.getElementById('docker-status').textContent =
@@ -779,7 +864,7 @@ window.addEventListener('DOMContentLoaded', async () => {
           await loadContainers();
           // Actualizar dashboard si está activo
           const dashboardTab = document.getElementById('tab-dashboard');
-          if (dashboardTab && dashboardTab.classList.contains('active')) {
+          if (dashboardTab?.classList.contains('active')) {
             loadDashboardStats();
           }
         }
@@ -791,10 +876,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Verificar actualizaciones después de 3 segundos
     setTimeout(() => checkForUpdates(true), 3000);
   } catch (error) {
-    console.error('❌ Error al inicializar la aplicación:', error);
-    alert(
-      'Error al inicializar la aplicación. Por favor, reinicia la aplicación.',
-    );
+    console.error('[App] Error initializing:', error);
+    showNotification('Error initializing app. Please restart.', 'error');
   }
 });
 
@@ -812,9 +895,13 @@ window.switchTab = (tabName) => {
   });
   document.getElementById(`tab-${tabName}`)?.classList.add('active');
 
-  // Load data based on active tab
+  // Load data based on active tab - RECARGAR SIEMPRE CON TRADUCCIONES
   if (tabName === 'dashboard') {
     loadDashboardStats();
+  } else if (tabName === 'databases') {
+    loadContainers();
+  } else if (tabName === 'images') {
+    loadImages();
   } else if (tabName === 'migration') {
     checkLocalPostgres();
     loadMigratedDatabases();
@@ -875,7 +962,7 @@ async function connectLocalPostgres(e) {
   };
 
   try {
-    const result = await invoke('connect_local_postgres', { config });
+    const _result = await invoke('connect_local_postgres', { config });
     localPostgresConfig = config;
 
     const statusDot = document.getElementById('status-dot');
@@ -971,7 +1058,7 @@ async function startMigration(dbName) {
   showLoading();
 
   try {
-    const result = await invoke('migrate_database', {
+    const _result = await invoke('migrate_database', {
       config: localPostgresConfig,
       databaseName: dbName,
     });
@@ -1082,3 +1169,112 @@ window.connectLocalPostgres = connectLocalPostgres;
 window.startMigration = startMigration;
 window.removeMigratedDatabase = removeMigratedDatabase;
 window.startMigration = startMigration;
+
+// ===== IMAGES TAB =====
+async function loadImages() {
+  const list = document.getElementById('images-list');
+  const noData = document.getElementById('no-images');
+  showLoading('loadingImages');
+
+  try {
+    const images = await invoke('list_images');
+
+    if (!images || images.length === 0) {
+      list.innerHTML = '';
+      noData.style.display = 'block';
+      return;
+    }
+
+    noData.style.display = 'none';
+    list.innerHTML = images
+      .map((img) => {
+        const mainTag = img.tags[0] || 'unknown';
+        const shortId = img.id.substring(7, 19); // Quitar sha256:
+
+        return `
+      <div class="image-card">
+        <div class="image-header">
+          <div class="image-icon">${getIcon('package')}</div>
+          <div class="image-info">
+            <h3 class="image-title">${mainTag}</h3>
+            <span class="image-meta">${img.size} • ${img.created}</span>
+          </div>
+        </div>
+        
+        <div class="image-data">
+          <div class="image-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
+            <span class="image-data-label">ID</span>
+            <span class="image-data-value">${shortId}</span>
+          </div>
+          ${
+            img.tags.length > 1
+              ? `
+          <div class="image-data-item">
+            <span class="image-data-label">Tags</span>
+            <span class="image-data-value">${img.tags.length} tags</span>
+          </div>
+          `
+              : ''
+          }
+        </div>
+        
+        <div class="image-actions">
+          <button class="btn btn-danger btn-sm" onclick="confirmRemoveImage('${img.id}', '${mainTag}')" data-tooltip="Delete image">
+            ${getIcon('trash')} Remove
+          </button>
+        </div>
+      </div>
+    `;
+      })
+      .join('');
+  } catch (e) {
+    console.error('Error loading images:', e);
+    showNotification('Error loading images: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function confirmRemoveImage(id, name) {
+  const modal = document.createElement('div');
+  modal.className = 'confirm-modal';
+  modal.innerHTML = `
+    <div class="confirm-modal-content">
+      <div class="confirm-modal-header">
+        <h3>Delete Image</h3>
+        <button class="confirm-modal-close" onclick="this.closest('.confirm-modal').remove()">×</button>
+      </div>
+      <div class="confirm-modal-body">
+        <p>Are you sure you want to delete <strong>${name}</strong>?</p>
+        <p style="color: var(--danger); font-size: 0.875rem; margin-top: 0.5rem;">
+          ⚠ This will remove the image from your system. You'll need to download it again if you want to use it.
+        </p>
+      </div>
+      <div class="confirm-modal-footer">
+        <button class="btn btn-secondary" onclick="this.closest('.confirm-modal').remove()">Cancel</button>
+        <button class="btn btn-danger" onclick="executeRemoveImage('${id}')">Delete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('active'), 10);
+}
+
+async function executeRemoveImage(id) {
+  document.querySelector('.confirm-modal')?.remove();
+  showLoading('deletingImage');
+  try {
+    await invoke('remove_image', { imageId: id });
+    showNotification('Image removed successfully', 'success');
+    await loadImages();
+  } catch (e) {
+    showNotification('Error: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+// NO TRANSLATIONS - ENGLISH ONLY
+window.loadImages = loadImages;
+window.confirmRemoveImage = confirmRemoveImage;
+window.executeRemoveImage = executeRemoveImage;
