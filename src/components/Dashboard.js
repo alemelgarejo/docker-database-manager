@@ -73,30 +73,25 @@ export class Dashboard {
       mariadb: 'mariadb',
     };
     const dbIcon = getIcon(dbIconMap[container.db_type] || 'database');
-    const statusClass = container.status === 'running' ? 'running' : 'stopped';
     const statusIcon = container.status === 'running' ? getIcon('play') : getIcon('pause');
+    const statusClass = container.status === 'running' ? 'running' : 'stopped';
 
     return `
-      <div class="db-card" onclick="switchTab('databases')">
-        <div class="db-card-header">
-          <div class="db-card-icon" data-db-type="${container.db_type}">
+      <div class="recent-card" onclick="switchTab('databases')">
+        <div class="recent-card-left">
+          <div class="recent-db-icon" data-db-type="${container.db_type}">
             ${dbIcon}
           </div>
-          <div class="db-card-title-section">
-            <h3 class="db-card-title">${container.name}</h3>
-            <span class="db-card-subtitle">${container.db_type.toUpperCase()}</span>
-          </div>
-          <div class="db-status db-status-${statusClass}">
-            ${statusIcon}
-            <span>${container.status}</span>
+          <div class="recent-info">
+            <div class="recent-title">${container.name}</div>
+            <div class="recent-meta">
+              ${container.db_type.toUpperCase()} ${container.version || ''} • Port ${container.port}
+            </div>
           </div>
         </div>
-        
-        <div class="db-card-info">
-          <div class="db-info-item">
-            <span class="db-info-label">Port</span>
-            <span class="db-info-value">${container.port}</span>
-          </div>
+        <div class="recent-status-badge status-${statusClass}">
+          ${statusIcon}
+          <span>${container.status}</span>
         </div>
       </div>
     `;

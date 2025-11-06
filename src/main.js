@@ -340,30 +340,19 @@ function loadRecentContainers(containers) {
       };
       const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
       const statusClass = c.status === 'running' ? 'running' : 'stopped';
-      const statusIcon = c.status === 'running' ? getIcon('play') : getIcon('pause');
 
       return `
-      <div class="db-card" onclick="switchTab('databases')" style="cursor: pointer;">
-        <div class="db-card-header">
-          <div class="db-card-icon" data-db-type="${c.db_type}">
+      <div class="recent-card" onclick="switchTab('databases')" style="cursor: pointer;">
+        <div class="recent-card-left">
+          <div class="recent-db-icon" data-db-type="${c.db_type}">
             ${dbIcon}
           </div>
-          <div class="db-card-title-section">
-            <h3 class="db-card-title">${c.name}</h3>
-            <span class="db-card-subtitle">${c.db_type.toUpperCase()}</span>
-          </div>
-          <div class="db-status db-status-${statusClass}">
-            ${statusIcon}
-            <span>${c.status}</span>
+          <div class="recent-info">
+            <h4 class="recent-title">${c.name}</h4>
+            <span class="recent-meta">${c.db_type.toUpperCase()} · Port ${c.port}</span>
           </div>
         </div>
-        
-        <div class="db-card-info">
-          <div class="db-info-item">
-            <span class="db-info-label">Port</span>
-            <span class="db-info-value">${c.port}</span>
-          </div>
-        </div>
+        <span class="recent-status recent-status-${statusClass}">${c.status}</span>
       </div>
     `;
     })
@@ -1220,7 +1209,7 @@ async function loadImages() {
         
         <div class="image-actions">
           <button class="btn btn-danger btn-sm" onclick="confirmRemoveImage('${img.id}', '${mainTag}')" data-tooltip="Delete image">
-            ${getIcon('trash')} Remove
+            ${getIcon('trash')}
           </button>
         </div>
       </div>

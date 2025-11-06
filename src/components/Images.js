@@ -18,10 +18,10 @@ export class Images {
   }
 
   render(images) {
-    const container = document.getElementById('images-grid');
+    const container = document.getElementById('images-list');
     
     if (!container) {
-      console.error('Element #images-grid not found');
+      console.error('Element #images-list not found');
       return;
     }
 
@@ -97,7 +97,7 @@ export class Images {
   }
 
   renderError() {
-    const container = document.getElementById('images-grid');
+    const container = document.getElementById('images-list');
     if (container) {
       container.innerHTML = `
         <div class="no-data">
