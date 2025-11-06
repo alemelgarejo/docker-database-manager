@@ -954,9 +954,7 @@ window.switchTab = (tabName) => {
 
 // ===== LOCAL POSTGRES MIGRATION =====
 let localPostgresConfig = null;
-let localDatabasesSearchFilters = null;
 let allLocalDatabases = [];
-let migratedDatabasesSearchFilters = null;
 let allMigratedDatabases = [];
 
 async function checkLocalPostgres() {
@@ -1059,23 +1057,6 @@ async function loadLocalDatabases() {
     // Store all databases
     allLocalDatabases = databases;
 
-    // Initialize search filters if not already done
-    if (!localDatabasesSearchFilters) {
-      localDatabasesSearchFilters = new SearchFilters('migration');
-      
-      // Subscribe to filter changes
-      localDatabasesSearchFilters.onChange(() => {
-        renderLocalDatabases();
-      });
-      
-      // Insert search filters in the correct container
-      const filtersContainer = document.getElementById('search-filters-migration');
-      if (filtersContainer) {
-        filtersContainer.innerHTML = localDatabasesSearchFilters.render();
-        localDatabasesSearchFilters.attachEventListeners();
-      }
-    }
-
     renderLocalDatabases();
   } catch (error) {
     showNotification(`Error loading databases: ${error}`, 'error');
@@ -1088,15 +1069,13 @@ function renderLocalDatabases() {
   
   if (!list) return;
 
-  // Apply filters
-  const filteredDatabases = localDatabasesSearchFilters 
-    ? localDatabasesSearchFilters.applyFilters(allLocalDatabases)
-    : allLocalDatabases;
+  // Use all databases without filtering
+  const filteredDatabases = allLocalDatabases;
 
   if (filteredDatabases.length === 0) {
     list.innerHTML = '';
     noData.style.display = 'block';
-    noData.querySelector('p').textContent = 'No databases match your search criteria.';
+    noData.querySelector('p').textContent = 'No databases found.';
     return;
   }
 
@@ -1192,21 +1171,6 @@ async function loadMigratedDatabases() {
       ...db,
       name: db.original_name
     }));
-
-    // Initialize search filters if not already done
-    if (!migratedDatabasesSearchFilters) {
-      migratedDatabasesSearchFilters = new SearchFilters('migration');
-      
-      // Subscribe to filter changes
-      migratedDatabasesSearchFilters.onChange(() => {
-        renderMigratedDatabases();
-      });
-      
-      // Insert search filters before the list
-      const filtersHTML = migratedDatabasesSearchFilters.render();
-      list.insertAdjacentHTML('beforebegin', filtersHTML);
-      migratedDatabasesSearchFilters.attachEventListeners();
-    }
 
     renderMigratedDatabases();
   } catch (error) {

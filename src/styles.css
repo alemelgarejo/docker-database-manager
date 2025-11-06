@@ -2128,6 +2128,10 @@ button span,
   z-index: 10000;
   pointer-events: none;
   animation: tooltipFadeIn 0.15s ease;
+  max-width: 250px;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  hyphens: auto;
 }
 
 [data-tooltip]:hover::after {
@@ -2166,6 +2170,22 @@ button span,
 
 .header-actions [data-tooltip]:hover::after,
 .db-card-actions [data-tooltip]:hover::after {
+  bottom: auto;
+  top: calc(100% + 3px);
+  border-top-color: transparent;
+  border-bottom-color: rgba(15, 23, 42, 0.98);
+}
+
+/* Para tooltips en filtros (prevenir salirse de la app) */
+.filter-actions [data-tooltip]:hover::before {
+  bottom: auto;
+  top: calc(100% + 8px);
+  max-width: 200px;
+  white-space: normal;
+  text-align: center;
+}
+
+.filter-actions [data-tooltip]:hover::after {
   bottom: auto;
   top: calc(100% + 3px);
   border-top-color: transparent;
@@ -2488,6 +2508,17 @@ button span,
   min-width: 0;
 }
 
+.image-name {
+  font-size: 0.938rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.25rem 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: "SF Mono", monospace;
+}
+
 .image-title {
   font-size: 0.938rem;
   font-weight: 600;
@@ -2499,9 +2530,51 @@ button span,
   font-family: "SF Mono", monospace;
 }
 
+.image-size {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 .image-meta {
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+.image-details {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  background: var(--border);
+  padding: 1px;
+}
+
+.detail-row {
+  padding: 0.875rem 1.25rem;
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-row:hover {
+  background: var(--surface-hover);
+}
+
+.detail-label {
+  font-size: 0.688rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.detail-value {
+  font-size: 0.813rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-family: "SF Mono", monospace;
 }
 
 .image-data {
@@ -2547,6 +2620,34 @@ button span,
   border-radius: 0 0 12px 12px;
   display: flex;
   justify-content: flex-end;
+}
+
+.image-actions .action-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.image-actions .action-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--text-secondary);
+}
+
+.image-actions .action-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  transform: translateY(-2px);
+}
+
+.image-actions .action-btn:hover svg {
+  stroke: var(--danger);
 }
 
 /* ===================================
