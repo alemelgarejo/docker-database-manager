@@ -1,5 +1,6 @@
-// Import icons
+// Import icons and components
 import { getIcon } from './icons.js';
+import { SearchFilters } from './components/SearchFilters.js';
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -28,6 +29,10 @@ function getTauriAPI() {
 
 // Variables globales para la API
 let invoke, check, ask, relaunch;
+
+// Componente de búsqueda y filtros
+let searchFilters = null;
+let allContainers = []; // Cache de todos los contenedores
 
 console.log('[main.js] v3 loaded - improved Docker connection');
 console.log('[main.js] Waiting for Tauri to be available...');
@@ -142,19 +147,48 @@ async function checkDocker() {
   }
 }
 
-async function loadContainers() {
+async function loadContainers(applyFilters = false) {
   try {
-    const containers = await invoke('list_containers');
+    // Si no se está aplicando filtros, recargar desde la API
+    if (!applyFilters) {
+      allContainers = await invoke('list_containers');
+    }
+    
     const list = document.getElementById('containers-list');
     const noData = document.getElementById('no-containers');
+    const resultsCount = document.getElementById('results-count');
+
+    // Aplicar filtros si el componente existe
+    let containers = allContainers;
+    if (searchFilters && applyFilters) {
+      containers = searchFilters.applyFilters(allContainers);
+    }
 
     if (!containers.length) {
       list.innerHTML = '';
       noData.style.display = 'block';
+      if (resultsCount) {
+        resultsCount.textContent = allContainers.length > 0 
+          ? 'No results found' 
+          : '';
+      }
       return;
     }
 
     noData.style.display = 'none';
+    
+    // Mostrar información de resultados
+    if (resultsCount) {
+      if (searchFilters && searchFilters.getActiveFiltersCount() > 0) {
+        resultsCount.innerHTML = `
+          Showing <strong>${containers.length}</strong> of <strong>${allContainers.length}</strong> databases
+          <span class="filter-badge">${searchFilters.getActiveFiltersCount()} active filters</span>
+        `;
+      } else {
+        resultsCount.textContent = `Showing ${containers.length} databases`;
+      }
+    }
+
     list.innerHTML = containers
       .map((c) => {
         const shortId = c.id.substring(0, 12);
@@ -243,6 +277,24 @@ async function loadContainers() {
       .join('');
   } catch (e) {
     showNotification('Error: ' + e, 'error');
+  }
+}
+
+// ===== SEARCH & FILTERS =====
+function initializeSearchFilters() {
+  // Crear instancia del componente
+  searchFilters = new SearchFilters();
+  
+  // Renderizar el componente en el DOM
+  const searchContainer = document.getElementById('search-filters');
+  if (searchContainer) {
+    searchContainer.innerHTML = searchFilters.render();
+    searchFilters.attachEventListeners();
+    
+    // Suscribirse a cambios de filtros
+    searchFilters.onChange(() => {
+      loadContainers(true); // true = aplicar filtros sin recargar desde API
+    });
   }
 }
 
@@ -813,6 +865,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Cargar tipos de bases de datos
     await loadDatabaseTypes();
 
+    // Inicializar componente de búsqueda y filtros
+    initializeSearchFilters();
+
     // Event listeners
     document.getElementById('new-db-btn').onclick = openCreateModal;
     document.getElementById('refresh-btn').onclick = async () => {
@@ -899,6 +954,10 @@ window.switchTab = (tabName) => {
 
 // ===== LOCAL POSTGRES MIGRATION =====
 let localPostgresConfig = null;
+let localDatabasesSearchFilters = null;
+let allLocalDatabases = [];
+let migratedDatabasesSearchFilters = null;
+let allMigratedDatabases = [];
 
 async function checkLocalPostgres() {
   const statusDot = document.getElementById('status-dot');
@@ -990,49 +1049,93 @@ async function loadLocalDatabases() {
       list.innerHTML = '';
       noData.style.display = 'block';
       container.style.display = 'block';
+      allLocalDatabases = [];
       return;
     }
 
     noData.style.display = 'none';
     container.style.display = 'block';
 
-    list.innerHTML = databases
-      .map(
-        (db) => `
-      <div class="local-db-card">
-        <div class="local-db-header">
-          <span class="local-db-icon">${getIcon('database')}</span>
-          <h3 class="local-db-name">${db.name}</h3>
-        </div>
-        <div class="local-db-info">
-          <div class="local-db-info-row">
-            <span class="local-db-info-label">Size:</span>
-            <span class="local-db-info-value">${db.size || 'Unknown'}</span>
-          </div>
-          <div class="local-db-info-row">
-            <span class="local-db-info-label">Owner:</span>
-            <span class="local-db-info-value">${db.owner || 'Unknown'}</span>
-          </div>
-          <div class="local-db-info-row">
-            <span class="local-db-info-label">Tables:</span>
-            <span class="local-db-info-value">${db.tables || 'Unknown'}</span>
-          </div>
-        </div>
-        <div class="local-db-actions">
-          <button 
-            class="btn btn-primary btn-sm" 
-            onclick="startMigration('${db.name}')"
-          >
-            ${getIcon('play')} Migrate to Docker
-          </button>
-        </div>
-      </div>
-    `,
-      )
-      .join('');
+    // Store all databases
+    allLocalDatabases = databases;
+
+    // Initialize search filters if not already done
+    if (!localDatabasesSearchFilters) {
+      localDatabasesSearchFilters = new SearchFilters('migration');
+      
+      // Subscribe to filter changes
+      localDatabasesSearchFilters.onChange(() => {
+        renderLocalDatabases();
+      });
+      
+      // Insert search filters in the correct container
+      const filtersContainer = document.getElementById('search-filters-migration');
+      if (filtersContainer) {
+        filtersContainer.innerHTML = localDatabasesSearchFilters.render();
+        localDatabasesSearchFilters.attachEventListeners();
+      }
+    }
+
+    renderLocalDatabases();
   } catch (error) {
     showNotification(`Error loading databases: ${error}`, 'error');
   }
+}
+
+function renderLocalDatabases() {
+  const list = document.getElementById('local-databases-list');
+  const noData = document.getElementById('no-local-databases');
+  
+  if (!list) return;
+
+  // Apply filters
+  const filteredDatabases = localDatabasesSearchFilters 
+    ? localDatabasesSearchFilters.applyFilters(allLocalDatabases)
+    : allLocalDatabases;
+
+  if (filteredDatabases.length === 0) {
+    list.innerHTML = '';
+    noData.style.display = 'block';
+    noData.querySelector('p').textContent = 'No databases match your search criteria.';
+    return;
+  }
+
+  noData.style.display = 'none';
+  
+  list.innerHTML = filteredDatabases
+    .map(
+      (db) => `
+    <div class="local-db-card">
+      <div class="local-db-header">
+        <span class="local-db-icon">${getIcon('database')}</span>
+        <h3 class="local-db-name">${db.name}</h3>
+      </div>
+      <div class="local-db-info">
+        <div class="local-db-info-row">
+          <span class="local-db-info-label">Size:</span>
+          <span class="local-db-info-value">${db.size || 'Unknown'}</span>
+        </div>
+        <div class="local-db-info-row">
+          <span class="local-db-info-label">Owner:</span>
+          <span class="local-db-info-value">${db.owner || 'Unknown'}</span>
+        </div>
+        <div class="local-db-info-row">
+          <span class="local-db-info-label">Tables:</span>
+          <span class="local-db-info-value">${db.tables || 'Unknown'}</span>
+        </div>
+      </div>
+      <div class="local-db-actions">
+        <button 
+          class="btn btn-primary btn-sm" 
+          onclick="startMigration('${db.name}')"
+        >
+          ${getIcon('play')} Migrate to Docker
+        </button>
+      </div>
+    </div>
+  `,
+    )
+    .join('');
 }
 
 async function startMigration(dbName) {
@@ -1077,55 +1180,100 @@ async function loadMigratedDatabases() {
       list.innerHTML = '';
       noData.style.display = 'block';
       container.style.display = 'none';
+      allMigratedDatabases = [];
       return;
     }
 
     noData.style.display = 'none';
     container.style.display = 'block';
 
-    list.innerHTML = databases
-      .map(
-        (db) => `
-      <div class="local-db-card migrated-db-card">
-        <div class="local-db-header">
-          <span class="local-db-icon">${getIcon('check')}</span>
-          <h3 class="local-db-name">${db.original_name}</h3>
-        </div>
-        <div class="local-db-info">
-          <div class="local-db-info-row">
-            <span class="local-db-info-label">Container:</span>
-            <span class="local-db-info-value">${db.container_name}</span>
-          </div>
-          <div class="local-db-info-row">
-            <span class="local-db-info-label">Migrated:</span>
-            <span class="local-db-info-value">${new Date(db.migrated_at).toLocaleString()}</span>
-          </div>
-          <div class="local-db-info-row">
-            <span class="local-db-info-label">Status:</span>
-            <span class="local-db-info-value" style="color: var(--success)">Running in Docker</span>
-          </div>
-        </div>
-        <div class="local-db-actions">
-          <button 
-            class="btn btn-danger btn-sm" 
-            onclick="removeMigratedDatabase('${db.container_id}')"
-          >
-            ${getIcon('trash')} Delete Container
-          </button>
-          <button 
-            class="btn btn-ghost btn-sm" 
-            onclick="switchTab('databases')"
-          >
-            ${getIcon('eye')} View in Databases
-          </button>
-        </div>
-      </div>
-    `,
-      )
-      .join('');
+    // Store all migrated databases with name property
+    allMigratedDatabases = databases.map(db => ({
+      ...db,
+      name: db.original_name
+    }));
+
+    // Initialize search filters if not already done
+    if (!migratedDatabasesSearchFilters) {
+      migratedDatabasesSearchFilters = new SearchFilters('migration');
+      
+      // Subscribe to filter changes
+      migratedDatabasesSearchFilters.onChange(() => {
+        renderMigratedDatabases();
+      });
+      
+      // Insert search filters before the list
+      const filtersHTML = migratedDatabasesSearchFilters.render();
+      list.insertAdjacentHTML('beforebegin', filtersHTML);
+      migratedDatabasesSearchFilters.attachEventListeners();
+    }
+
+    renderMigratedDatabases();
   } catch (error) {
     console.error('Error loading migrated databases:', error);
   }
+}
+
+function renderMigratedDatabases() {
+  const list = document.getElementById('migrated-databases-list');
+  const noData = document.getElementById('no-migrated-databases');
+  
+  if (!list) return;
+
+  // Apply filters
+  const filteredDatabases = migratedDatabasesSearchFilters 
+    ? migratedDatabasesSearchFilters.applyFilters(allMigratedDatabases)
+    : allMigratedDatabases;
+
+  if (filteredDatabases.length === 0) {
+    list.innerHTML = '';
+    noData.style.display = 'block';
+    noData.querySelector('p').textContent = 'No migrated databases match your search criteria.';
+    return;
+  }
+
+  noData.style.display = 'none';
+
+  list.innerHTML = filteredDatabases
+    .map(
+      (db) => `
+    <div class="local-db-card migrated-db-card">
+      <div class="local-db-header">
+        <span class="local-db-icon">${getIcon('check')}</span>
+        <h3 class="local-db-name">${db.original_name}</h3>
+      </div>
+      <div class="local-db-info">
+        <div class="local-db-info-row">
+          <span class="local-db-info-label">Container:</span>
+          <span class="local-db-info-value">${db.container_name}</span>
+        </div>
+        <div class="local-db-info-row">
+          <span class="local-db-info-label">Migrated:</span>
+          <span class="local-db-info-value">${new Date(db.migrated_at).toLocaleString()}</span>
+        </div>
+        <div class="local-db-info-row">
+          <span class="local-db-info-label">Status:</span>
+          <span class="local-db-info-value" style="color: var(--success)">Running in Docker</span>
+        </div>
+      </div>
+      <div class="local-db-actions">
+        <button 
+          class="btn btn-danger btn-sm" 
+          onclick="removeMigratedDatabase('${db.container_id}')"
+        >
+          ${getIcon('trash')} Delete Container
+        </button>
+        <button 
+          class="btn btn-ghost btn-sm" 
+          onclick="switchTab('databases')"
+        >
+          ${getIcon('eye')} View in Databases
+        </button>
+      </div>
+    </div>
+  `,
+    )
+    .join('');
 }
 
 async function removeMigratedDatabase(containerId) {
