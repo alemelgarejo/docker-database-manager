@@ -160,7 +160,10 @@ pub struct DatabaseTypeInfo {
 #[tauri::command]
 async fn check_docker(state: State<'_, AppState>) -> Result<bool, String> {
     let docker = state.docker.lock().await;
-    docker.ping().await.map(|_| true).map_err(|e| e.to_string())
+    match docker.ping().await {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false), // NUNCA devolver Err, solo Ok(false)
+    }
 }
 
 #[tauri::command]
@@ -215,9 +218,11 @@ async fn list_containers(state: State<'_, AppState>) -> Result<Vec<ContainerInfo
 
 #[tauri::command]
 async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> Result<String, String> {
+    println!("📦 Creando base de datos: {} ({})", config.name, config.db_type.to_string());
     let docker = state.docker.lock().await;
     let image = config.db_type.get_image_name(&config.version);
     
+    println!("🔍 Validando puerto y nombre...");
     // Validar que el puerto no esté en uso
     let containers = docker.list_containers(Some(ListContainersOptions::<String> { 
         all: true, 
@@ -248,6 +253,7 @@ async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> 
         }
     }
     
+    println!("🔍 Verificando imagen: {}", image);
     // Verificar si la imagen ya existe localmente
     let images = docker.list_images::<String>(None).await.map_err(|e| format!("Error listando imágenes: {}", e))?;
     let image_exists = images.iter().any(|img| {
@@ -256,17 +262,37 @@ async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> 
     
     // Solo descargar la imagen si no existe
     if !image_exists {
-        let mut stream = docker.create_image(
-            Some(CreateImageOptions { 
-                from_image: image.as_str(), 
-                ..Default::default() 
-            }), 
-            None, 
-            None
-        );
-        while let Some(result) = stream.next().await {
-            result.map_err(|e| format!("Error descargando imagen: {}", e))?;
+        println!("⬇️ Descargando imagen {}... (esto puede tardar 2-5 minutos la primera vez)", image);
+        
+        // Timeout de 10 minutos para la descarga
+        let download_future = async {
+            let mut stream = docker.create_image(
+                Some(CreateImageOptions { 
+                    from_image: image.as_str(), 
+                    ..Default::default() 
+                }), 
+                None, 
+                None
+            );
+            while let Some(result) = stream.next().await {
+                result.map_err(|e| format!("Error descargando imagen: {}", e))?;
+            }
+            Ok::<(), String>(())
+        };
+        
+        match tokio::time::timeout(std::time::Duration::from_secs(600), download_future).await {
+            Ok(Ok(_)) => {
+                println!("✅ Imagen descargada correctamente: {}", image);
+            },
+            Ok(Err(e)) => {
+                return Err(format!("Error al descargar imagen: {}", e));
+            },
+            Err(_) => {
+                return Err("Timeout: La descarga de la imagen tardó más de 10 minutos. Verifica tu conexión a internet.".to_string());
+            }
         }
+    } else {
+        println!("✅ Imagen ya existe localmente: {}", image);
     }
     
     // Configurar según el tipo de base de datos
