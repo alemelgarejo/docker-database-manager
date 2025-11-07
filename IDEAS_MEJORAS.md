@@ -2,13 +2,13 @@
 
 ## 🎯 FUNCIONALIDADES ESENCIALES
 
-### 1. 📊 Dashboard/Panel Principal
+### 1. 📊 Dashboard/Panel Principal - HECHO
 - **Estadísticas generales**: Número total de contenedores, uso de recursos (CPU, RAM, Disk)
 - **Gráficas en tiempo real** de uso de recursos
 - **Estado de Docker Desktop** más prominente
 - **Quick actions**: Botones rápidos para crear BD común, ver logs recientes, etc.
 
-### 2. 🔍 Búsqueda y Filtros
+### 2. 🔍 Búsqueda y Filtros - HECHO
 - **Barra de búsqueda** para filtrar contenedores por nombre
 - **Filtros por**:
   - Tipo de BD (PostgreSQL, MySQL, MongoDB, etc.)
@@ -17,7 +17,7 @@
   - Fecha de creación
 - **Ordenar por**: Nombre, fecha, estado, tipo
 
-### 3. 📁 Gestión de Volúmenes
+### 3. 📁 Gestión de Volúmenes - HECHO
 - **Pestaña dedicada a Volúmenes Docker**
 - Ver todos los volúmenes y su tamaño
 - **Backup de volúmenes** (exportar a .tar.gz)

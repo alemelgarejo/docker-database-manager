@@ -902,6 +902,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       else if (tabName === 'databases') iconName = 'database';
       else if (tabName === 'images') iconName = 'package';
       else if (tabName === 'migration') iconName = 'package';
+      else if (tabName === 'volumes') iconName = 'folder';
 
       const text = btn.querySelector('span:last-child')?.textContent || '';
       if (text) {
@@ -968,6 +969,24 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Verificar actualizaciones después de 3 segundos
     setTimeout(() => checkForUpdates(true), 3000);
+
+    // Sistema de scroll para header/tabs - con debounce para evitar saltos
+    let scrollTimeout;
+    const headerHeight = 70;
+    
+    window.addEventListener('scroll', () => {
+      clearTimeout(scrollTimeout);
+      
+      scrollTimeout = setTimeout(() => {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
+        if (scrollTop > headerHeight) {
+          document.body.classList.add('scrolled');
+        } else {
+          document.body.classList.remove('scrolled');
+        }
+      }, 10); // Pequeño debounce para suavizar
+    });
   } catch (error) {
     console.error('[App] Error initializing:', error);
     showNotification('Error initializing app. Please restart.', 'error');
@@ -998,6 +1017,8 @@ window.switchTab = (tabName) => {
   } else if (tabName === 'migration') {
     checkLocalPostgres();
     loadMigratedDatabases();
+  } else if (tabName === 'volumes') {
+    loadVolumes();
   }
 };
 
@@ -1497,3 +1518,227 @@ async function executeRemoveImage(id) {
 window.loadImages = loadImages;
 window.confirmRemoveImage = confirmRemoveImage;
 window.executeRemoveImage = executeRemoveImage;
+
+// ===== VOLUMES MANAGEMENT =====
+let currentVolume = null;
+
+async function loadVolumes() {
+  const list = document.getElementById('volumes-list');
+  const noData = document.getElementById('no-volumes');
+  showLoading('Loading volumes...');
+
+  try {
+    const volumes = await invoke('list_volumes');
+
+    if (!volumes || volumes.length === 0) {
+      list.innerHTML = '';
+      noData.style.display = 'block';
+      return;
+    }
+
+    noData.style.display = 'none';
+    list.innerHTML = volumes
+      .map((vol) => {
+        const statusClass = vol.in_use ? 'in-use' : 'orphan';
+        const statusText = vol.in_use ? 'In Use' : 'Unused';
+        
+        return `
+      <div class="volume-card ${statusClass}">
+        <div class="volume-header">
+          <div class="volume-icon">${getIcon('database')}</div>
+          <div class="volume-info">
+            <h3 class="volume-title">${vol.name}</h3>
+            <span class="volume-meta">${vol.driver} • ${vol.size}</span>
+          </div>
+          <span class="volume-status volume-status-${statusClass}">${statusText}</span>
+        </div>
+        
+        <div class="volume-data">
+          <div class="volume-data-item" onclick="copyToClipboard('${vol.mountpoint}', 'Path copied!')" data-tooltip="Click to copy">
+            <span class="volume-data-label">Mount Point</span>
+            <span class="volume-data-value volume-path">${vol.mountpoint}</span>
+          </div>
+          <div class="volume-data-item">
+            <span class="volume-data-label">Created</span>
+            <span class="volume-data-value">${vol.created || 'Unknown'}</span>
+          </div>
+          ${vol.containers.length > 0 ? `
+          <div class="volume-data-item">
+            <span class="volume-data-label">Used by</span>
+            <span class="volume-data-value">${vol.containers.join(', ')}</span>
+          </div>
+          ` : ''}
+        </div>
+        
+        <div class="volume-actions">
+          <button class="btn btn-primary btn-sm" onclick="openBackupVolumeModal('${vol.name}')" data-tooltip="Backup volume">
+            ${getIcon('download')} Backup
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="openRestoreVolumeModal('${vol.name}')" data-tooltip="Restore volume">
+            ${getIcon('upload')} Restore
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="confirmRemoveVolume('${vol.name}', ${vol.in_use})" data-tooltip="Delete volume">
+            ${getIcon('trash')}
+          </button>
+        </div>
+      </div>
+    `;
+      })
+      .join('');
+  } catch (e) {
+    console.error('Error loading volumes:', e);
+    showNotification('Error loading volumes: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function confirmRemoveVolume(volumeName, inUse) {
+  const warningMsg = inUse
+    ? '⚠️ This volume is currently in use by containers. This may cause data loss.'
+    : '';
+  
+  const modal = document.createElement('div');
+  modal.className = 'confirm-modal';
+  modal.innerHTML = `
+    <div class="confirm-modal-content">
+      <div class="confirm-modal-header">
+        <h3>Delete Volume</h3>
+        <button class="confirm-modal-close" onclick="this.closest('.confirm-modal').remove()">×</button>
+      </div>
+      <div class="confirm-modal-body">
+        <p>Are you sure you want to delete volume <strong>${volumeName}</strong>?</p>
+        ${warningMsg ? `<p style="color: var(--warning); margin-top: 0.5rem;">${warningMsg}</p>` : ''}
+        <label class="confirm-checkbox">
+          <input type="checkbox" id="force-remove-volume">
+          <span>Force remove (even if in use)</span>
+        </label>
+      </div>
+      <div class="confirm-modal-footer">
+        <button class="btn btn-secondary" onclick="this.closest('.confirm-modal').remove()">Cancel</button>
+        <button class="btn btn-danger" onclick="executeRemoveVolume('${volumeName}')">Delete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(() => modal.classList.add('active'), 10);
+}
+
+async function executeRemoveVolume(volumeName) {
+  const forceCheckbox = document.getElementById('force-remove-volume');
+  const force = forceCheckbox ? forceCheckbox.checked : false;
+
+  document.querySelector('.confirm-modal')?.remove();
+  showLoading('Deleting volume...');
+
+  try {
+    const result = await invoke('remove_volume', { volumeName, force });
+    showNotification(result, 'success');
+    await loadVolumes();
+  } catch (e) {
+    showNotification('Error: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function confirmPruneVolumes() {
+  if (!confirm('Remove all unused volumes?\n\nThis will delete volumes that are not currently being used by any container.')) {
+    return;
+  }
+  executePruneVolumes();
+}
+
+async function executePruneVolumes() {
+  showLoading('Cleaning unused volumes...');
+  try {
+    const result = await invoke('prune_volumes');
+    showNotification(result, 'success');
+    await loadVolumes();
+  } catch (e) {
+    showNotification('Error: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function openBackupVolumeModal(volumeName) {
+  currentVolume = volumeName;
+  document.getElementById('backup-volume-name').textContent = volumeName;
+  document.getElementById('backup-path').value = '';
+  document.getElementById('backup-volume-modal').classList.add('active');
+}
+
+function closeBackupVolumeModal() {
+  document.getElementById('backup-volume-modal').classList.remove('active');
+  currentVolume = null;
+}
+
+async function executeBackupVolume(e) {
+  e.preventDefault();
+  const backupPath = document.getElementById('backup-path').value;
+  
+  closeBackupVolumeModal();
+  showLoading('Creating backup...');
+
+  try {
+    const result = await invoke('backup_volume', {
+      volumeName: currentVolume,
+      backupPath,
+    });
+    showNotification(result, 'success');
+  } catch (e) {
+    showNotification('Error creating backup: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function openRestoreVolumeModal(volumeName) {
+  currentVolume = volumeName;
+  document.getElementById('restore-volume-name').textContent = volumeName;
+  document.getElementById('restore-file').value = '';
+  document.getElementById('restore-volume-modal').classList.add('active');
+}
+
+function closeRestoreVolumeModal() {
+  document.getElementById('restore-volume-modal').classList.remove('active');
+  currentVolume = null;
+}
+
+async function executeRestoreVolume(e) {
+  e.preventDefault();
+  const backupFile = document.getElementById('restore-file').value;
+  
+  if (!confirm(`Are you sure you want to restore volume "${currentVolume}"?\n\n⚠️ This will REPLACE all existing data in the volume.`)) {
+    return;
+  }
+  
+  closeRestoreVolumeModal();
+  showLoading('Restoring volume...');
+
+  try {
+    const result = await invoke('restore_volume', {
+      volumeName: currentVolume,
+      backupFile,
+    });
+    showNotification(result, 'success');
+    await loadVolumes();
+  } catch (e) {
+    showNotification('Error restoring volume: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+// Exponer funciones globalmente
+window.loadVolumes = loadVolumes;
+window.confirmRemoveVolume = confirmRemoveVolume;
+window.executeRemoveVolume = executeRemoveVolume;
+window.confirmPruneVolumes = confirmPruneVolumes;
+window.openBackupVolumeModal = openBackupVolumeModal;
+window.closeBackupVolumeModal = closeBackupVolumeModal;
+window.executeBackupVolume = executeBackupVolume;
+window.openRestoreVolumeModal = openRestoreVolumeModal;
+window.closeRestoreVolumeModal = closeRestoreVolumeModal;
+window.executeRestoreVolume = executeRestoreVolume;
