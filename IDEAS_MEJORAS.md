@@ -38,7 +38,7 @@
 - Asignar contenedores a redes específicas
 - Ver qué contenedores están en cada red
 
-### 6. 📊 Monitoreo en Tiempo Real
+### 6. 📊 Monitoreo en Tiempo Real - HECHO
 - **Gráficas de recursos por contenedor**:
   - CPU usage
   - RAM usage
@@ -53,7 +53,7 @@
 - Diferentes perfiles de conexión
 - Exportar/Importar configuraciones
 
-### 8. 📝 Plantillas de Bases de Datos
+### 8. 📝 Plantillas de Bases de Datos 
 - **Plantillas predefinidas**:
   - Desarrollo local
   - Testing

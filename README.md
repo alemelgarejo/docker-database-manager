@@ -16,6 +16,12 @@ Aplicación de escritorio moderna para macOS que permite gestionar múltiples ba
 - 🗑️ **Eliminar contenedores** y volúmenes de datos
 - 📋 **Ver logs en tiempo real** de tus contenedores
 - 💻 **Consola SQL integrada** para ejecutar consultas (bases de datos compatibles)
+- 📝 **Plantillas de Bases de Datos**: Configuraciones predefinidas y personalizables
+  - 💻 Local Development
+  - 🧪 Testing Environment
+  - 🚀 Production Optimized
+  - 🛡️ High Availability
+  - ⭐ Crear, exportar e importar plantillas personalizadas
 - 🔄 **Auto-actualización** integrada - Actualiza la app con un solo click, sin reinstalar
 - 🔄 **Actualización de contenedores** cada 10 segundos
 - 🎨 **Interfaz moderna** con diseño limpio y responsive
@@ -268,6 +274,13 @@ pnpm check
 ```
 
 Ver [BIOME_CONFIG.md](BIOME_CONFIG.md) para más detalles sobre la configuración de Biome.
+
+## 📚 Documentación
+
+- [📝 Templates Guide](TEMPLATES-GUIDE.md) - Guía completa sobre plantillas de bases de datos
+- [🔀 Branch Protection Guide](BRANCH_PROTECTION_GUIDE.md) - Flujo de trabajo con Git
+- [🎨 Biome Configuration](BIOME_CONFIG.md) - Configuración de formateo y linting
+- [📊 Monitoring Guide](MONITORING-GUIDE.md) - Monitoreo de contenedores
 
 ## 📝 Licencia
 

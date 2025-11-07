@@ -2,6 +2,8 @@
 import { getIcon } from './icons.js';
 import { SearchFilters } from './components/SearchFilters.js';
 import { loadChart } from './chart-loader.js';
+import { templatesManager } from './components/Templates.js';
+import { getAllTemplates, applyTemplate, saveCustomTemplate } from './templates.js';
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -478,7 +480,7 @@ async function createDB(e) {
   );
 
   try {
-    const config = {
+    let config = {
       name: document.getElementById('db-name').value,
       username: document.getElementById('db-username').value || '',
       password: document.getElementById('db-password').value || '',
@@ -486,6 +488,13 @@ async function createDB(e) {
       version: document.getElementById('db-version').value,
       type: selectedDbType,
     };
+
+    // Apply template if selected
+    if (selectedTemplateForDb) {
+      const templateConfig = applyTemplate(selectedTemplateForDb, selectedDbType, config);
+      config = { ...config, ...templateConfig };
+      console.log('Applied template configuration:', templateConfig);
+    }
 
     console.log('Creating database with config:', config);
 
@@ -500,6 +509,7 @@ async function createDB(e) {
     console.log('Database created:', result);
 
     showNotification('Database created successfully', 'success');
+    selectedTemplateForDb = null; // Reset template selection
     window.closeCreateModal();
     await loadContainers();
     await loadDashboardStats(); // Actualizar dashboard también
@@ -768,6 +778,9 @@ function showStep2() {
   // Inyectar icono en botón back
   updateBackButton();
 
+  // Load template options
+  loadTemplateOptions();
+
   // Configurar valores por defecto
   document.getElementById('db-port').value = dbType.default_port;
   document.getElementById('db-username').value = dbType.default_user;
@@ -1023,6 +1036,8 @@ window.switchTab = (tabName) => {
     loadMigratedDatabases();
   } else if (tabName === 'volumes') {
     loadVolumes();
+  } else if (tabName === 'templates') {
+    loadTemplatesTab();
   }
 };
 
@@ -1972,3 +1987,186 @@ function checkAlerts(stats) {
 // Exponer funciones globalmente
 window.openMonitoringModal = openMonitoringModal;
 window.closeMonitoringModal = closeMonitoringModal;
+
+// ===== TEMPLATES =====
+let selectedTemplateForDb = null;
+
+function loadTemplatesTab() {
+  templatesManager.render('templates-tab-content');
+}
+
+function loadTemplateOptions() {
+  const templateSelect = document.getElementById('db-template');
+  if (!templateSelect) return;
+
+  const templates = getAllTemplates();
+  const dbType = selectedDbType;
+
+  // Filter templates that support current db type
+  const availableTemplates = Object.values(templates).filter(
+    (t) => t.configurations[dbType]
+  );
+
+  templateSelect.innerHTML = `
+    <option value="">Default Configuration</option>
+    ${availableTemplates
+      .map(
+        (t) =>
+          `<option value="${t.id}">${t.icon} ${t.name} - ${t.description}</option>`
+      )
+      .join('')}
+  `;
+}
+
+window.onTemplateChange = () => {
+  const templateSelect = document.getElementById('db-template');
+  selectedTemplateForDb = templateSelect.value || null;
+
+  if (selectedTemplateForDb) {
+    const templates = getAllTemplates();
+    const template = templates[selectedTemplateForDb];
+    showNotification(`Template "${template.name}" selected. Configuration will be applied on creation.`, 'info');
+  }
+};
+
+window.closeTemplateDetailsModal = () => {
+  document.getElementById('template-details-modal')?.classList.remove('active');
+};
+
+window.closeCreateTemplateModal = () => {
+  const modal = document.getElementById('create-template-modal');
+  modal?.classList.remove('active');
+  document.getElementById('create-template-form')?.reset();
+  delete document.getElementById('create-template-form')?.dataset.editingId;
+};
+
+let templateDbConfigCounter = 0;
+
+window.addTemplateDbConfig = () => {
+  const container = document.getElementById('template-db-configs');
+  const configId = `template-config-${templateDbConfigCounter++}`;
+
+  const configHtml = `
+    <div class="template-db-config-item" data-config-id="${configId}">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Database Type:</label>
+          <select class="template-db-type" required>
+            <option value="">Select database</option>
+            <option value="postgres">PostgreSQL</option>
+            <option value="mysql">MySQL</option>
+            <option value="mongodb">MongoDB</option>
+            <option value="redis">Redis</option>
+            <option value="mariadb">MariaDB</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Memory Limit:</label>
+          <input type="text" class="template-memory" placeholder="256m" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>CPU Limit:</label>
+          <input type="text" class="template-cpus" placeholder="1" required />
+        </div>
+        <div class="form-group">
+          <label>Restart Policy:</label>
+          <select class="template-restart-policy">
+            <option value="">None</option>
+            <option value="always">Always</option>
+            <option value="unless-stopped">Unless Stopped</option>
+            <option value="on-failure">On Failure</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Environment Variables (JSON):</label>
+        <textarea class="template-env-vars" placeholder='{"KEY": "value"}' rows="3"></textarea>
+      </div>
+      <button type="button" class="btn btn-sm btn-danger" onclick="removeTemplateDbConfig('${configId}')">
+        ${getIcon('trash')} Remove
+      </button>
+    </div>
+  `;
+
+  container.insertAdjacentHTML('beforeend', configHtml);
+};
+
+window.removeTemplateDbConfig = (configId) => {
+  document.querySelector(`[data-config-id="${configId}"]`)?.remove();
+};
+
+window.handleCreateTemplate = async (e) => {
+  e.preventDefault();
+
+  const form = e.target;
+  const name = form.querySelector('#template-name').value;
+  const description = form.querySelector('#template-description').value;
+  const icon = form.querySelector('#template-icon').value;
+  const editingId = form.dataset.editingId;
+
+  // Collect database configurations
+  const configurations = {};
+  const configItems = form.querySelectorAll('.template-db-config-item');
+
+  try {
+    configItems.forEach((item) => {
+      const dbType = item.querySelector('.template-db-type').value;
+      const memory = item.querySelector('.template-memory').value;
+      const cpus = item.querySelector('.template-cpus').value;
+      const restartPolicy = item.querySelector('.template-restart-policy').value;
+      const envVarsText = item.querySelector('.template-env-vars').value;
+
+      if (!dbType) {
+        throw new Error('Please select a database type for all configurations');
+      }
+
+      let envVars = {};
+      if (envVarsText.trim()) {
+        try {
+          envVars = JSON.parse(envVarsText);
+        } catch (e) {
+          throw new Error(`Invalid JSON in environment variables for ${dbType}`);
+        }
+      }
+
+      configurations[dbType] = {
+        memory,
+        cpus,
+        env: envVars,
+      };
+
+      if (restartPolicy) {
+        configurations[dbType].restartPolicy = restartPolicy;
+      }
+    });
+
+    if (Object.keys(configurations).length === 0) {
+      throw new Error('Please add at least one database configuration');
+    }
+
+    const template = {
+      id: editingId,
+      name,
+      description,
+      icon,
+      configurations,
+    };
+
+    saveCustomTemplate(template);
+    closeCreateTemplateModal();
+    loadTemplatesTab();
+    showNotification(
+      editingId ? 'Template updated successfully' : 'Template created successfully',
+      'success'
+    );
+  } catch (error) {
+    showNotification(error.message, 'error');
+  }
+};
+
+// Expose functions globally
+window.loadTemplatesTab = loadTemplatesTab;
+window.loadTemplateOptions = loadTemplateOptions;
+
