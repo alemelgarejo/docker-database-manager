@@ -189,7 +189,9 @@
             <h2 data-i18n="dockerDatabases">Docker Databases</h2>
             
             <!-- Search and Filters Component -->
-            <div id="search-filters"></div>
+            <div id="search-filters">
+              <!-- Will be populated by JavaScript -->
+            </div>
             
             <div class="results-info">
               <span id="results-count"></span>
@@ -210,7 +212,9 @@
             <h2 data-i18n="dockerImages">Docker Images</h2>
             
             <!-- Search and Filters Component -->
-            <div id="search-filters-images"></div>
+            <div id="search-filters-images">
+              <!-- Will be populated by JavaScript -->
+            </div>
             
             <div class="results-info">
               <span id="results-count-images"></span>
@@ -308,7 +312,9 @@
               <h3>Available Local Databases</h3>
               
               <!-- Search and Filters will be inserted here -->
-              <div id="search-filters-migration"></div>
+              <div id="search-filters-migration">
+                <!-- Will be populated by JavaScript -->
+              </div>
               
               <div class="results-info">
                 <span id="results-count-migration"></span>
@@ -565,6 +571,74 @@
             <button type="submit" class="btn btn-warning">Restore Volume</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Container Monitoring Modal -->
+    <div id="monitoring-modal" class="modal monitoring-modal">
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h3>Container Monitoring: <span id="monitoring-container-name"></span></h3>
+          <button class="modal-close" onclick="closeMonitoringModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Stats Cards -->
+          <div class="stats-cards-grid">
+            <div class="monitoring-stat-card">
+              <div class="stat-icon cpu">CPU</div>
+              <div>
+                <div class="stat-label">CPU Usage</div>
+                <div class="stat-value" id="monitor-cpu">0%</div>
+              </div>
+            </div>
+            <div class="monitoring-stat-card">
+              <div class="stat-icon memory">RAM</div>
+              <div>
+                <div class="stat-label">Memory Usage</div>
+                <div class="stat-value" id="monitor-memory">0 MB</div>
+                <div class="stat-sublabel" id="monitor-memory-percent">0%</div>
+              </div>
+            </div>
+            <div class="monitoring-stat-card">
+              <div class="stat-icon network">NET</div>
+              <div>
+                <div class="stat-label">Network I/O</div>
+                <div class="stat-value-small">
+                  <span>RX <span id="monitor-network-rx">0 KB</span></span>
+                  <span>TX <span id="monitor-network-tx">0 KB</span></span>
+                </div>
+              </div>
+            </div>
+            <div class="monitoring-stat-card">
+              <div class="stat-icon disk">DISK</div>
+              <div>
+                <div class="stat-label">Disk I/O</div>
+                <div class="stat-value-small">
+                  <span>R <span id="monitor-disk-read">0 KB</span></span>
+                  <span>W <span id="monitor-disk-write">0 KB</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts -->
+          <div class="charts-container">
+            <div class="chart-wrapper">
+              <h4>CPU Usage History</h4>
+              <canvas id="cpu-chart"></canvas>
+            </div>
+            <div class="chart-wrapper">
+              <h4>Memory Usage History</h4>
+              <canvas id="memory-chart"></canvas>
+            </div>
+          </div>
+
+          <!-- Alerts -->
+          <div id="monitoring-alerts" class="monitoring-alerts"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeMonitoringModal()">Close</button>
+        </div>
       </div>
     </div>
   </body>
