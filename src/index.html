@@ -421,10 +421,7 @@
 
               <div class="form-group">
                 <label for="db-template">Template (optional):</label>
-                <select id="db-template" onchange="onTemplateChange()">
-                  <option value="">Default Configuration</option>
-                  <!-- Templates will be loaded here -->
-                </select>
+                <div id="db-template-select"></div>
                 <p class="form-help-text">Select a template to apply optimized configurations</p>
               </div>
 
@@ -466,9 +463,7 @@
 
               <div class="form-group">
                 <label for="db-version">Version:</label>
-                <select id="db-version" required>
-                  <!-- Versions will be loaded dynamically -->
-                </select>
+                <div id="db-version-select"></div>
               </div>
 
               <div class="modal-footer">

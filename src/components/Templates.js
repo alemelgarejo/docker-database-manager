@@ -102,7 +102,7 @@ export class TemplatesManager {
             onclick="templatesManager.viewTemplate('${template.id}')"
             data-tooltip="View details"
           >
-            ${getIcon('eye')}
+            View
           </button>
           ${isCustom ? `
             <button 
@@ -110,7 +110,7 @@ export class TemplatesManager {
               onclick="templatesManager.editTemplate('${template.id}')"
               data-tooltip="Edit"
             >
-              ${getIcon('edit')}
+              Edit
             </button>
           ` : ''}
           <button 
@@ -118,7 +118,7 @@ export class TemplatesManager {
             onclick="templatesManager.exportTemplate('${template.id}')"
             data-tooltip="Export"
           >
-            ${getIcon('download')}
+            Export
           </button>
           ${isCustom ? `
             <button 
@@ -126,15 +126,9 @@ export class TemplatesManager {
               onclick="templatesManager.deleteTemplate('${template.id}')"
               data-tooltip="Delete"
             >
-              ${getIcon('trash')}
+              Delete
             </button>
           ` : ''}
-          <button 
-            class="btn btn-sm btn-primary" 
-            onclick="templatesManager.selectTemplate('${template.id}')"
-          >
-            Use Template
-          </button>
         </div>
       </div>
     `;

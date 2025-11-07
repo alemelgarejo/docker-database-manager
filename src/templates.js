@@ -6,10 +6,10 @@ export const predefinedTemplates = {
     id: 'development',
     name: 'Local Development',
     description: 'Optimized for local development with standard configurations',
-    icon: '💻',
+    icon: 'DEV',
     category: 'predefined',
     configurations: {
-      postgres: {
+      postgresql: {
         memory: '256m',
         cpus: '1',
         env: {
@@ -55,10 +55,10 @@ export const predefinedTemplates = {
     id: 'testing',
     name: 'Testing Environment',
     description: 'Lightweight setup for automated testing and CI/CD',
-    icon: '🧪',
+    icon: 'TEST',
     category: 'predefined',
     configurations: {
-      postgres: {
+      postgresql: {
         memory: '128m',
         cpus: '0.5',
         env: {
@@ -108,10 +108,10 @@ export const predefinedTemplates = {
     id: 'production',
     name: 'Production Optimized',
     description: 'High-performance configuration for production workloads',
-    icon: '🚀',
+    icon: 'PROD',
     category: 'predefined',
     configurations: {
-      postgres: {
+      postgresql: {
         memory: '2g',
         cpus: '2',
         env: {
@@ -164,10 +164,10 @@ export const predefinedTemplates = {
     id: 'high-availability',
     name: 'High Availability',
     description: 'Configuration for high availability and reliability',
-    icon: '🛡️',
+    icon: 'HA',
     category: 'predefined',
     configurations: {
-      postgres: {
+      postgresql: {
         memory: '4g',
         cpus: '4',
         env: {
@@ -283,28 +283,40 @@ export function deleteCustomTemplate(templateId) {
 
 // Apply template to database configuration
 export function applyTemplate(templateId, dbType, baseConfig) {
+  console.log('[applyTemplate] Called with:', { templateId, dbType, baseConfig });
+  
   const templates = getAllTemplates();
   const template = templates[templateId];
   
   if (!template) {
-    console.warn(`Template ${templateId} not found`);
+    console.warn(`[applyTemplate] Template ${templateId} not found`);
+    console.log('[applyTemplate] Available templates:', Object.keys(templates));
     return baseConfig;
   }
+  
+  console.log('[applyTemplate] Template found:', template);
+  console.log('[applyTemplate] Template configurations keys:', Object.keys(template.configurations));
   
   const dbConfig = template.configurations[dbType];
   if (!dbConfig) {
-    console.warn(`No configuration for ${dbType} in template ${templateId}`);
+    console.warn(`[applyTemplate] No configuration for ${dbType} in template ${templateId}`);
+    console.log('[applyTemplate] Available db types in template:', Object.keys(template.configurations));
     return baseConfig;
   }
   
-  return {
+  console.log('[applyTemplate] DB Config found:', dbConfig);
+  
+  const result = {
     ...baseConfig,
     ...dbConfig,
     env: {
-      ...baseConfig.env,
-      ...dbConfig.env,
+      ...(baseConfig.env || {}),
+      ...(dbConfig.env || {}),
     },
   };
+  
+  console.log('[applyTemplate] Returning config:', result);
+  return result;
 }
 
 // Export template to JSON file
@@ -365,7 +377,7 @@ export function createTemplateFromConfig(name, description, dbType, config) {
   const template = {
     name,
     description,
-    icon: '⭐',
+    icon: 'CUSTOM',
     category: 'custom',
     configurations: {
       [dbType]: {
