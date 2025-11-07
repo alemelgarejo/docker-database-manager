@@ -179,6 +179,14 @@
         <section id="tab-databases" class="tab-content">
           <div class="containers-section">
             <h2 data-i18n="dockerDatabases">Docker Databases</h2>
+            
+            <!-- Search and Filters Component -->
+            <div id="search-filters"></div>
+            
+            <div class="results-info">
+              <span id="results-count"></span>
+            </div>
+            
             <div id="containers-list" class="containers-grid">
               <!-- Containers will be loaded here -->
             </div>
@@ -191,12 +199,15 @@
         <!-- Tab: Images -->
         <section id="tab-images" class="tab-content">
           <div class="containers-section">
-            <div class="section-header">
-              <h2 data-i18n="dockerImages">Docker Images</h2>
-              <button class="btn btn-secondary" onclick="loadImages()" data-tooltip="Refresh images list">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-              </button>
+            <h2 data-i18n="dockerImages">Docker Images</h2>
+            
+            <!-- Search and Filters Component -->
+            <div id="search-filters-images"></div>
+            
+            <div class="results-info">
+              <span id="results-count-images"></span>
             </div>
+            
             <div id="images-list" class="images-grid">
               <!-- Images will be loaded here -->
             </div>
@@ -287,6 +298,14 @@
             <!-- Local Databases List -->
             <div id="local-databases-container" style="display: none">
               <h3>Available Local Databases</h3>
+              
+              <!-- Search and Filters will be inserted here -->
+              <div id="search-filters-migration"></div>
+              
+              <div class="results-info">
+                <span id="results-count-migration"></span>
+              </div>
+              
               <div id="local-databases-list" class="local-databases-grid">
                 <!-- Local databases will be loaded here -->
               </div>
