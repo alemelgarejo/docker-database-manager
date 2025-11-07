@@ -2121,17 +2121,17 @@ button span,
   color: var(--text-primary);
   font-size: 0.75rem;
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
+  word-wrap: break-word;
   border-radius: 6px;
   border: 1px solid var(--border);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   z-index: 10000;
   pointer-events: none;
   animation: tooltipFadeIn 0.15s ease;
-  max-width: 250px;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  hyphens: auto;
+  max-width: 200px;
+  text-align: center;
+  line-height: 1.4;
 }
 
 [data-tooltip]:hover::after {
@@ -2160,29 +2160,28 @@ button span,
 
 /* Para elementos que están en la parte superior, mostrar tooltip abajo */
 .header-actions [data-tooltip]:hover::before,
-.db-card-actions [data-tooltip]:hover::before {
+.db-card-actions [data-tooltip]:hover::before,
+.image-actions [data-tooltip]:hover::before,
+.local-db-actions [data-tooltip]:hover::before {
   bottom: auto;
   top: calc(100% + 8px);
-  max-width: 200px;
-  white-space: normal;
-  text-align: center;
 }
 
 .header-actions [data-tooltip]:hover::after,
-.db-card-actions [data-tooltip]:hover::after {
+.db-card-actions [data-tooltip]:hover::after,
+.image-actions [data-tooltip]:hover::after,
+.local-db-actions [data-tooltip]:hover::after {
   bottom: auto;
   top: calc(100% + 3px);
   border-top-color: transparent;
   border-bottom-color: rgba(15, 23, 42, 0.98);
 }
 
-/* Para tooltips en filtros (prevenir salirse de la app) */
+/* Para tooltips en filtros */
 .filter-actions [data-tooltip]:hover::before {
   bottom: auto;
   top: calc(100% + 8px);
-  max-width: 200px;
-  white-space: normal;
-  text-align: center;
+  max-width: 150px;
 }
 
 .filter-actions [data-tooltip]:hover::after {
@@ -2190,19 +2189,6 @@ button span,
   top: calc(100% + 3px);
   border-top-color: transparent;
   border-bottom-color: rgba(15, 23, 42, 0.98);
-}
-
-/* Evitar que los tooltips se salgan por la derecha */
-[data-tooltip].tooltip-left:hover::before {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
-[data-tooltip].tooltip-left:hover::after {
-  left: auto;
-  right: 10px;
-  transform: none;
 }
 
 
@@ -2923,4 +2909,42 @@ button span,
   .sort-order-btn {
     width: 100%;
   }
+}
+
+/* ===== TIPPY.JS CUSTOM THEME ===== */
+.tippy-box[data-theme~='custom'] {
+  background-color: rgba(15, 23, 42, 0.98);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+  padding: 0.5rem 0.75rem;
+  max-width: 200px !important;
+  text-align: center;
+  word-wrap: break-word;
+}
+
+.tippy-box[data-theme~='custom'][data-placement^='top'] > .tippy-arrow::before {
+  border-top-color: rgba(15, 23, 42, 0.98);
+}
+
+.tippy-box[data-theme~='custom'][data-placement^='bottom'] > .tippy-arrow::before {
+  border-bottom-color: rgba(15, 23, 42, 0.98);
+}
+
+.tippy-box[data-theme~='custom'][data-placement^='left'] > .tippy-arrow::before {
+  border-left-color: rgba(15, 23, 42, 0.98);
+}
+
+.tippy-box[data-theme~='custom'][data-placement^='right'] > .tippy-arrow::before {
+  border-right-color: rgba(15, 23, 42, 0.98);
+}
+
+/* Ocultar los tooltips CSS antiguos cuando Tippy está activo */
+.tippy-box[data-theme~='custom'] ~ [data-tooltip]:hover::before,
+.tippy-box[data-theme~='custom'] ~ [data-tooltip]:hover::after {
+  display: none !important;
 }

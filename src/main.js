@@ -32,7 +32,10 @@ let invoke, check, ask, relaunch;
 
 // Componente de búsqueda y filtros
 let searchFilters = null;
+let imagesSearchFilters = null;
+let migrationSearchFilters = null;
 let allContainers = []; // Cache de todos los contenedores
+let allImages = []; // Cache de todas las imágenes
 
 console.log('[main.js] v3 loaded - improved Docker connection');
 console.log('[main.js] Waiting for Tauri to be available...');
@@ -160,7 +163,7 @@ async function loadContainers(applyFilters = false) {
 
     // Aplicar filtros si el componente existe
     let containers = allContainers;
-    if (searchFilters && applyFilters) {
+    if (searchFilters) {
       containers = searchFilters.applyFilters(allContainers);
     }
 
@@ -282,8 +285,8 @@ async function loadContainers(applyFilters = false) {
 
 // ===== SEARCH & FILTERS =====
 function initializeSearchFilters() {
-  // Crear instancia del componente
-  searchFilters = new SearchFilters();
+  // Crear instancia del componente para databases
+  searchFilters = new SearchFilters('databases');
   
   // Renderizar el componente en el DOM
   const searchContainer = document.getElementById('search-filters');
@@ -295,6 +298,50 @@ function initializeSearchFilters() {
     searchFilters.onChange(() => {
       loadContainers(true); // true = aplicar filtros sin recargar desde API
     });
+  }
+}
+
+function initializeImagesSearchFilters() {
+  // Crear instancia del componente para images
+  imagesSearchFilters = new SearchFilters('images');
+  console.log('[initializeImagesSearchFilters] Component created');
+  
+  // Renderizar el componente en el DOM
+  const searchContainer = document.getElementById('search-filters-images');
+  if (searchContainer) {
+    searchContainer.innerHTML = imagesSearchFilters.render();
+    imagesSearchFilters.attachEventListeners();
+    console.log('[initializeImagesSearchFilters] Component rendered and attached');
+    
+    // Suscribirse a cambios de filtros
+    imagesSearchFilters.onChange(() => {
+      console.log('[imagesSearchFilters] Filter changed, reloading...');
+      loadImages(true); // true = aplicar filtros sin recargar desde API
+    });
+  } else {
+    console.error('[initializeImagesSearchFilters] Container not found');
+  }
+}
+
+function initializeMigrationSearchFilters() {
+  // Crear instancia del componente para migration
+  migrationSearchFilters = new SearchFilters('migration');
+  console.log('[initializeMigrationSearchFilters] Component created');
+  
+  // Renderizar el componente en el DOM
+  const searchContainer = document.getElementById('search-filters-migration');
+  if (searchContainer) {
+    searchContainer.innerHTML = migrationSearchFilters.render();
+    migrationSearchFilters.attachEventListeners();
+    console.log('[initializeMigrationSearchFilters] Component rendered and attached');
+    
+    // Suscribirse a cambios de filtros
+    migrationSearchFilters.onChange(() => {
+      console.log('[migrationSearchFilters] Filter changed, rendering...');
+      renderLocalDatabases(); // Renderizar con filtros aplicados
+    });
+  } else {
+    console.error('[initializeMigrationSearchFilters] Container not found');
   }
 }
 
@@ -865,8 +912,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Cargar tipos de bases de datos
     await loadDatabaseTypes();
 
-    // Inicializar componente de búsqueda y filtros
+    // Inicializar componentes de búsqueda y filtros
     initializeSearchFilters();
+    initializeImagesSearchFilters();
+    // migrationSearchFilters se inicializará cuando se carguen las bases de datos locales
 
     // Event listeners
     document.getElementById('new-db-btn').onclick = openCreateModal;
@@ -1057,6 +1106,11 @@ async function loadLocalDatabases() {
     // Store all databases
     allLocalDatabases = databases;
 
+    // Inicializar el componente de filtros si no existe
+    if (!migrationSearchFilters) {
+      initializeMigrationSearchFilters();
+    }
+
     renderLocalDatabases();
   } catch (error) {
     showNotification(`Error loading databases: ${error}`, 'error');
@@ -1066,20 +1120,50 @@ async function loadLocalDatabases() {
 function renderLocalDatabases() {
   const list = document.getElementById('local-databases-list');
   const noData = document.getElementById('no-local-databases');
+  const resultsCount = document.getElementById('results-count-migration');
   
   if (!list) return;
 
-  // Use all databases without filtering
-  const filteredDatabases = allLocalDatabases;
+  console.log('[renderLocalDatabases] migrationSearchFilters exists:', !!migrationSearchFilters);
+  console.log('[renderLocalDatabases] allLocalDatabases length:', allLocalDatabases?.length || 0);
+
+  // Aplicar filtros si el componente existe
+  let filteredDatabases = allLocalDatabases || [];
+  if (migrationSearchFilters) {
+    console.log('[renderLocalDatabases] Applying filters...');
+    filteredDatabases = migrationSearchFilters.applyFilters(filteredDatabases);
+    console.log('[renderLocalDatabases] After filters:', filteredDatabases.length, 'databases');
+  }
 
   if (filteredDatabases.length === 0) {
     list.innerHTML = '';
     noData.style.display = 'block';
-    noData.querySelector('p').textContent = 'No databases found.';
+    if (resultsCount) {
+      resultsCount.textContent = (allLocalDatabases && allLocalDatabases.length > 0) 
+        ? 'No results found' 
+        : '';
+    }
+    if (allLocalDatabases && allLocalDatabases.length > 0) {
+      noData.querySelector('p').textContent = 'No databases match your search criteria.';
+    } else {
+      noData.querySelector('p').textContent = 'No databases found in local PostgreSQL';
+    }
     return;
   }
 
   noData.style.display = 'none';
+  
+  // Mostrar información de resultados
+  if (resultsCount) {
+    if (migrationSearchFilters && migrationSearchFilters.getActiveFiltersCount() > 0) {
+      resultsCount.innerHTML = `
+        Showing <strong>${filteredDatabases.length}</strong> of <strong>${allLocalDatabases.length}</strong> databases
+        <span class="filter-badge">${migrationSearchFilters.getActiveFiltersCount()} active filters</span>
+      `;
+    } else {
+      resultsCount.textContent = `Showing ${filteredDatabases.length} databases`;
+    }
+  }
   
   list.innerHTML = filteredDatabases
     .map(
@@ -1184,15 +1268,13 @@ function renderMigratedDatabases() {
   
   if (!list) return;
 
-  // Apply filters
-  const filteredDatabases = migratedDatabasesSearchFilters 
-    ? migratedDatabasesSearchFilters.applyFilters(allMigratedDatabases)
-    : allMigratedDatabases;
+  // No aplicar filtros a las bases de datos migradas, solo mostrarlas
+  const filteredDatabases = allMigratedDatabases;
 
   if (filteredDatabases.length === 0) {
     list.innerHTML = '';
     noData.style.display = 'block';
-    noData.querySelector('p').textContent = 'No migrated databases match your search criteria.';
+    noData.querySelector('p').textContent = 'No databases have been migrated yet';
     return;
   }
 
@@ -1272,21 +1354,55 @@ window.removeMigratedDatabase = removeMigratedDatabase;
 window.startMigration = startMigration;
 
 // ===== IMAGES TAB =====
-async function loadImages() {
+async function loadImages(applyFilters = false) {
   const list = document.getElementById('images-list');
   const noData = document.getElementById('no-images');
-  showLoading('loadingImages');
+  const resultsCount = document.getElementById('results-count-images');
 
   try {
-    const images = await invoke('list_images');
+    // Si no se está aplicando filtros, recargar desde la API
+    if (!applyFilters) {
+      showLoading('loadingImages');
+      allImages = await invoke('list_images');
+      console.log('[loadImages] Loaded from API:', allImages.length, 'images');
+    }
+
+    console.log('[loadImages] imagesSearchFilters exists:', !!imagesSearchFilters);
+    console.log('[loadImages] allImages length:', allImages?.length || 0);
+
+    // Aplicar filtros si el componente existe
+    let images = allImages || [];
+    if (imagesSearchFilters) {
+      console.log('[loadImages] Applying filters...');
+      images = imagesSearchFilters.applyFilters(images);
+      console.log('[loadImages] After filters:', images.length, 'images');
+    }
 
     if (!images || images.length === 0) {
       list.innerHTML = '';
       noData.style.display = 'block';
+      if (resultsCount) {
+        resultsCount.textContent = (allImages && allImages.length > 0) 
+          ? 'No results found' 
+          : '';
+      }
       return;
     }
 
     noData.style.display = 'none';
+
+    // Mostrar información de resultados
+    if (resultsCount) {
+      if (imagesSearchFilters && imagesSearchFilters.getActiveFiltersCount() > 0) {
+        resultsCount.innerHTML = `
+          Showing <strong>${images.length}</strong> of <strong>${allImages.length}</strong> images
+          <span class="filter-badge">${imagesSearchFilters.getActiveFiltersCount()} active filters</span>
+        `;
+      } else {
+        resultsCount.textContent = `Showing ${images.length} images`;
+      }
+    }
+
     list.innerHTML = images
       .map((img) => {
         const mainTag = img.tags[0] || 'unknown';
@@ -1332,7 +1448,9 @@ async function loadImages() {
     console.error('Error loading images:', e);
     showNotification('Error loading images: ' + e, 'error');
   } finally {
-    hideLoading();
+    if (!applyFilters) {
+      hideLoading();
+    }
   }
 }
 

@@ -101,9 +101,9 @@ export class SearchFilters {
       const searchLower = this.filters.search.toLowerCase();
       filtered = filtered.filter(item => {
         if (this.mode === 'images') {
-          // For images: search by name and tags
-          return item.name.toLowerCase().includes(searchLower) ||
-                 (item.tags?.some(tag => tag.toLowerCase().includes(searchLower)));
+          // For images: search by tags and id
+          return (item.tags?.some(tag => tag.toLowerCase().includes(searchLower))) ||
+                 item.id?.toLowerCase().includes(searchLower);
         } else if (this.mode === 'migration') {
           // For migration: search by database name
           return item.name?.toLowerCase().includes(searchLower);
@@ -138,8 +138,14 @@ export class SearchFilters {
 
       switch (this.filters.sortBy) {
         case 'name':
-          compareA = a.name?.toLowerCase() || '';
-          compareB = b.name?.toLowerCase() || '';
+          if (this.mode === 'images') {
+            // For images, use the first tag as the name
+            compareA = (a.tags?.[0] || '').toLowerCase();
+            compareB = (b.tags?.[0] || '').toLowerCase();
+          } else {
+            compareA = a.name?.toLowerCase() || '';
+            compareB = b.name?.toLowerCase() || '';
+          }
           break;
         case 'type':
           if (this.mode === 'databases') {
@@ -159,17 +165,36 @@ export class SearchFilters {
           compareB = b.port || 0;
           break;
         case 'size':
-          // For images
-          compareA = a.size || 0;
-          compareB = b.size || 0;
+          // For images - need to parse size string for proper sorting
+          if (this.mode === 'images') {
+            const parseSize = (sizeStr) => {
+              if (!sizeStr) return 0;
+              const match = sizeStr.match(/(\d+\.?\d*)\s*(MB|GB|KB|B)/i);
+              if (!match) return 0;
+              const value = parseFloat(match[1]);
+              const unit = match[2].toUpperCase();
+              const multipliers = { B: 1, KB: 1024, MB: 1024*1024, GB: 1024*1024*1024 };
+              return value * (multipliers[unit] || 1);
+            };
+            compareA = parseSize(a.size);
+            compareB = parseSize(b.size);
+          } else {
+            compareA = a.size || 0;
+            compareB = b.size || 0;
+          }
           break;
         case 'created':
           compareA = new Date(a.created || 0).getTime();
           compareB = new Date(b.created || 0).getTime();
           break;
         default:
-          compareA = a.name || '';
-          compareB = b.name || '';
+          if (this.mode === 'images') {
+            compareA = (a.tags?.[0] || '').toLowerCase();
+            compareB = (b.tags?.[0] || '').toLowerCase();
+          } else {
+            compareA = a.name || '';
+            compareB = b.name || '';
+          }
       }
 
       if (compareA < compareB) return this.filters.sortOrder === 'asc' ? -1 : 1;
@@ -189,6 +214,13 @@ export class SearchFilters {
                             this.mode === 'migration' ? 'Search by database name...' : 
                             'Search by name or type...';
     
+    // Generate unique IDs based on mode
+    const searchId = `search-input-${this.mode}`;
+    const clearBtnId = `clear-search-btn-${this.mode}`;
+    const sortById = `sort-by-${this.mode}`;
+    const sortOrderBtnId = `sort-order-btn-${this.mode}`;
+    const resetBtnId = `reset-filters-btn-${this.mode}`;
+    
     return `
       <div class="search-filters-container">
         <!-- Search Bar -->
@@ -199,12 +231,16 @@ export class SearchFilters {
           </svg>
           <input 
             type="text" 
-            id="search-input" 
+            id="${searchId}" 
             placeholder="${placeholderText}" 
             value="${this.filters.search}"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
           />
           ${this.filters.search ? `
-            <button class="clear-search-btn" id="clear-search-btn" data-tooltip="Clear search">
+            <button class="clear-search-btn" id="${clearBtnId}" data-tooltip="Clear search">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -219,8 +255,8 @@ export class SearchFilters {
           
           <!-- Sort By -->
           <div class="filter-group">
-            <label for="sort-by">Sort by</label>
-            <select id="sort-by" class="filter-select">
+            <label for="${sortById}">Sort by</label>
+            <select id="${sortById}" class="filter-select">
               ${this.mode === 'images' ? `
                 <option value="name">Name</option>
                 <option value="size">Size</option>
@@ -240,7 +276,7 @@ export class SearchFilters {
 
           <div class="filter-actions">
             <!-- Sort Order -->
-            <button id="sort-order-btn" class="filter-action-btn" data-tooltip="Sort order: ${this.filters.sortOrder === 'asc' ? 'Ascending' : 'Descending'}">
+            <button id="${sortOrderBtnId}" class="filter-action-btn" data-tooltip="Sort order: ${this.filters.sortOrder === 'asc' ? 'Ascending' : 'Descending'}">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m7 15 5 5 5-5" opacity="${this.filters.sortOrder === 'desc' ? '1' : '0.3'}"></path>
                 <path d="m7 9 5-5 5 5" opacity="${this.filters.sortOrder === 'asc' ? '1' : '0.3'}"></path>
@@ -248,7 +284,7 @@ export class SearchFilters {
             </button>
 
             <!-- Reset Filters -->
-            <button id="reset-filters-btn" class="filter-action-btn ${activeFilters > 0 ? 'has-filters' : ''}" data-tooltip="Reset filters">
+            <button id="${resetBtnId}" class="filter-action-btn ${activeFilters > 0 ? 'has-filters' : ''}" data-tooltip="Reset filters">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
                 <path d="M21 3v5h-5"></path>
@@ -301,6 +337,10 @@ export class SearchFilters {
           class="filter-input" 
           placeholder="Filter..."
           value="${this.filters.port || ''}"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
         />
       </div>
     `;
@@ -310,8 +350,15 @@ export class SearchFilters {
    * Attach event listeners after rendering
    */
   attachEventListeners() {
+    // Generate unique IDs based on mode
+    const searchId = `search-input-${this.mode}`;
+    const clearBtnId = `clear-search-btn-${this.mode}`;
+    const sortById = `sort-by-${this.mode}`;
+    const sortOrderBtnId = `sort-order-btn-${this.mode}`;
+    const resetBtnId = `reset-filters-btn-${this.mode}`;
+    
     // Search input
-    const searchInput = document.getElementById('search-input');
+    const searchInput = document.getElementById(searchId);
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         this.updateFilter('search', e.target.value);
@@ -321,11 +368,11 @@ export class SearchFilters {
     }
 
     // Clear search button
-    const clearSearchBtn = document.getElementById('clear-search-btn');
+    const clearSearchBtn = document.getElementById(clearBtnId);
     if (clearSearchBtn) {
       clearSearchBtn.addEventListener('click', () => {
         this.updateFilter('search', '');
-        const searchInput = document.getElementById('search-input');
+        const searchInput = document.getElementById(searchId);
         if (searchInput) {
           searchInput.value = '';
           searchInput.focus();
@@ -365,7 +412,7 @@ export class SearchFilters {
     }
 
     // Sort by
-    const sortBy = document.getElementById('sort-by');
+    const sortBy = document.getElementById(sortById);
     if (sortBy) {
       sortBy.value = this.filters.sortBy;
       sortBy.addEventListener('change', (e) => {
@@ -374,7 +421,7 @@ export class SearchFilters {
     }
 
     // Sort order button
-    const sortOrderBtn = document.getElementById('sort-order-btn');
+    const sortOrderBtn = document.getElementById(sortOrderBtnId);
     if (sortOrderBtn) {
       sortOrderBtn.addEventListener('click', () => {
         const newOrder = this.filters.sortOrder === 'asc' ? 'desc' : 'asc';
@@ -385,13 +432,13 @@ export class SearchFilters {
     }
 
     // Reset filters button
-    const resetBtn = document.getElementById('reset-filters-btn');
+    const resetBtn = document.getElementById(resetBtnId);
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
         this.resetFilters();
         // Reset UI values
-        const searchInput = document.getElementById('search-input');
-        const sortBy = document.getElementById('sort-by');
+        const searchInput = document.getElementById(searchId);
+        const sortBy = document.getElementById(sortById);
         
         if (searchInput) searchInput.value = '';
         if (sortBy) sortBy.value = 'name';
@@ -433,13 +480,15 @@ export class SearchFilters {
     const searchBar = document.querySelector('.search-bar');
     if (!searchBar) return;
 
-    const existingClearBtn = document.getElementById('clear-search-btn');
+    const clearBtnId = `clear-search-btn-${this.mode}`;
+    const searchId = `search-input-${this.mode}`;
+    const existingClearBtn = document.getElementById(clearBtnId);
     
     if (searchValue && !existingClearBtn) {
       // Add clear button
       const clearBtn = document.createElement('button');
       clearBtn.className = 'clear-search-btn';
-      clearBtn.id = 'clear-search-btn';
+      clearBtn.id = clearBtnId;
       clearBtn.setAttribute('data-tooltip', 'Clear search');
       clearBtn.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -449,7 +498,7 @@ export class SearchFilters {
       `;
       clearBtn.addEventListener('click', () => {
         this.updateFilter('search', '');
-        const searchInput = document.getElementById('search-input');
+        const searchInput = document.getElementById(searchId);
         if (searchInput) {
           searchInput.value = '';
           searchInput.focus();
@@ -467,7 +516,8 @@ export class SearchFilters {
    * Update only the sort order button without re-rendering
    */
   updateSortOrderButton(order) {
-    const sortOrderBtn = document.getElementById('sort-order-btn');
+    const sortOrderBtnId = `sort-order-btn-${this.mode}`;
+    const sortOrderBtn = document.getElementById(sortOrderBtnId);
     if (!sortOrderBtn) return;
 
     sortOrderBtn.setAttribute('data-tooltip', `Sort order: ${order === 'asc' ? 'Ascending' : 'Descending'}`);
@@ -483,7 +533,8 @@ export class SearchFilters {
    * Update only the reset filters button badge
    */
   updateResetButton(count) {
-    const resetBtn = document.getElementById('reset-filters-btn');
+    const resetBtnId = `reset-filters-btn-${this.mode}`;
+    const resetBtn = document.getElementById(resetBtnId);
     if (!resetBtn) return;
 
     if (count > 0) {
