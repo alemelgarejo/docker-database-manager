@@ -664,7 +664,12 @@ pub fn run() {
             list_local_databases,
             migrate_database,
             get_migrated_databases,
-            remove_migrated_database
+            remove_migrated_database,
+            list_volumes,
+            remove_volume,
+            prune_volumes,
+            backup_volume,
+            restore_volume
         ])
         .run(tauri::generate_context!())
         .expect("error running app");
@@ -1730,4 +1735,319 @@ async fn remove_migrated_database(
     migrated.retain(|db| db.container_id != container_id);
     
     Ok("Migrated database removed successfully".to_string())
+}
+
+// ==================== VOLUMES MANAGEMENT ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct VolumeInfo {
+    name: String,
+    driver: String,
+    mountpoint: String,
+    created: String,
+    size: String,
+    in_use: bool,
+    containers: Vec<String>,
+}
+
+#[tauri::command]
+async fn list_volumes(docker_state: State<'_, AppState>) -> Result<Vec<VolumeInfo>, String> {
+    let docker = docker_state.docker.lock().await;
+    
+    // Listar todos los volúmenes
+    let volumes_response = docker
+        .list_volumes::<String>(None)
+        .await
+        .map_err(|e| format!("Failed to list volumes: {}", e))?;
+    
+    // Listar todos los contenedores para ver qué volúmenes están en uso
+    let containers = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+        .map_err(|e| format!("Failed to list containers: {}", e))?;
+    
+    let mut volume_infos = Vec::new();
+    
+    if let Some(volumes) = volumes_response.volumes {
+        for volume in volumes {
+            let volume_name = volume.name.clone();
+            
+            // Buscar qué contenedores usan este volumen
+            let mut using_containers = Vec::new();
+            for container in &containers {
+                if let Some(mounts) = &container.mounts {
+                    for mount in mounts {
+                        if let Some(name) = &mount.name {
+                            if name == &volume_name {
+                                if let Some(container_name) = container.names.as_ref().and_then(|n| n.first()) {
+                                    using_containers.push(container_name.trim_start_matches('/').to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Calcular tamaño (aproximado basándose en el uso)
+            let size = if let Some(usage_data) = &volume.usage_data {
+                format_size(usage_data.size)
+            } else {
+                "Unknown".to_string()
+            };
+            
+            volume_infos.push(VolumeInfo {
+                name: volume_name,
+                driver: volume.driver,
+                mountpoint: volume.mountpoint,
+                created: volume.created_at.unwrap_or_default(),
+                size,
+                in_use: !using_containers.is_empty(),
+                containers: using_containers,
+            });
+        }
+    }
+    
+    Ok(volume_infos)
+}
+
+#[tauri::command]
+async fn remove_volume(
+    volume_name: String,
+    force: bool,
+    docker_state: State<'_, AppState>,
+) -> Result<String, String> {
+    let docker = docker_state.docker.lock().await;
+    
+    use bollard::volume::RemoveVolumeOptions;
+    
+    docker
+        .remove_volume(
+            &volume_name,
+            Some(RemoveVolumeOptions { force }),
+        )
+        .await
+        .map_err(|e| format!("Failed to remove volume: {}", e))?;
+    
+    Ok(format!("Volume '{}' removed successfully", volume_name))
+}
+
+#[tauri::command]
+async fn prune_volumes(docker_state: State<'_, AppState>) -> Result<String, String> {
+    let docker = docker_state.docker.lock().await;
+    
+    use bollard::volume::PruneVolumesOptions;
+    use std::collections::HashMap;
+    
+    let result = docker
+        .prune_volumes(Some(PruneVolumesOptions::<String> {
+            filters: HashMap::new(),
+        }))
+        .await
+        .map_err(|e| format!("Failed to prune volumes: {}", e))?;
+    
+    let removed_count = result.volumes_deleted.as_ref().map(|v| v.len()).unwrap_or(0);
+    let space_reclaimed = result.space_reclaimed.unwrap_or(0);
+    
+    Ok(format!(
+        "Removed {} unused volumes, reclaimed {}",
+        removed_count,
+        format_size(space_reclaimed as i64)
+    ))
+}
+
+#[tauri::command]
+async fn backup_volume(
+    volume_name: String,
+    backup_path: String,
+    docker_state: State<'_, AppState>,
+) -> Result<String, String> {
+    use bollard::container::{Config, CreateContainerOptions};
+    
+    let docker = docker_state.docker.lock().await;
+    
+    // Crear un contenedor temporal para hacer backup del volumen
+    let container_name = format!("backup-{}", chrono::Utc::now().timestamp());
+    
+    let config = Config {
+        image: Some("alpine:latest".to_string()),
+        cmd: Some(vec![
+            "tar".to_string(),
+            "-czf".to_string(),
+            "/backup/volume-backup.tar.gz".to_string(),
+            "-C".to_string(),
+            "/volume-data".to_string(),
+            ".".to_string(),
+        ]),
+        host_config: Some(bollard::models::HostConfig {
+            binds: Some(vec![
+                format!("{}:/volume-data:ro", volume_name),
+                format!("{}:/backup", backup_path),
+            ]),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    
+    // Crear contenedor
+    let container = docker
+        .create_container(
+            Some(CreateContainerOptions {
+                name: container_name.clone(),
+                ..Default::default()
+            }),
+            config,
+        )
+        .await
+        .map_err(|e| format!("Failed to create backup container: {}", e))?;
+    
+    // Iniciar contenedor
+    docker
+        .start_container(&container.id, None::<StartContainerOptions<String>>)
+        .await
+        .map_err(|e| format!("Failed to start backup container: {}", e))?;
+    
+    // Esperar a que termine
+    use bollard::container::WaitContainerOptions;
+    let mut wait_stream = docker.wait_container(&container.id, None::<WaitContainerOptions<String>>);
+    
+    while let Some(wait_result) = wait_stream.next().await {
+        if let Ok(result) = wait_result {
+            if result.status_code != 0 {
+                // Limpiar contenedor
+                let _ = docker.remove_container(&container.id, None).await;
+                return Err(format!("Backup failed with status code: {}", result.status_code));
+            }
+            break;
+        }
+    }
+    
+    // Limpiar contenedor temporal
+    docker
+        .remove_container(&container.id, Some(RemoveContainerOptions {
+            force: true,
+            ..Default::default()
+        }))
+        .await
+        .map_err(|e| format!("Failed to remove backup container: {}", e))?;
+    
+    Ok(format!("Volume '{}' backed up successfully to {}/volume-backup.tar.gz", volume_name, backup_path))
+}
+
+#[tauri::command]
+async fn restore_volume(
+    volume_name: String,
+    backup_file: String,
+    docker_state: State<'_, AppState>,
+) -> Result<String, String> {
+    use bollard::container::{Config, CreateContainerOptions};
+    use bollard::volume::CreateVolumeOptions;
+    
+    let docker = docker_state.docker.lock().await;
+    
+    // Crear el volumen si no existe
+    let _ = docker
+        .create_volume(CreateVolumeOptions {
+            name: volume_name.clone(),
+            ..Default::default()
+        })
+        .await;
+    
+    // Extraer directorio del archivo de backup
+    let backup_dir = std::path::Path::new(&backup_file)
+        .parent()
+        .and_then(|p| p.to_str())
+        .ok_or("Invalid backup file path")?
+        .to_string();
+    
+    let backup_filename = std::path::Path::new(&backup_file)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid backup filename")?
+        .to_string();
+    
+    // Crear contenedor temporal para restaurar
+    let container_name = format!("restore-{}", chrono::Utc::now().timestamp());
+    
+    let config = Config {
+        image: Some("alpine:latest".to_string()),
+        cmd: Some(vec![
+            "tar".to_string(),
+            "-xzf".to_string(),
+            format!("/backup/{}", backup_filename),
+            "-C".to_string(),
+            "/volume-data".to_string(),
+        ]),
+        host_config: Some(bollard::models::HostConfig {
+            binds: Some(vec![
+                format!("{}:/volume-data", volume_name),
+                format!("{}:/backup:ro", backup_dir),
+            ]),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    
+    // Crear contenedor
+    let container = docker
+        .create_container(
+            Some(CreateContainerOptions {
+                name: container_name.clone(),
+                ..Default::default()
+            }),
+            config,
+        )
+        .await
+        .map_err(|e| format!("Failed to create restore container: {}", e))?;
+    
+    // Iniciar contenedor
+    docker
+        .start_container(&container.id, None::<StartContainerOptions<String>>)
+        .await
+        .map_err(|e| format!("Failed to start restore container: {}", e))?;
+    
+    // Esperar a que termine
+    use bollard::container::WaitContainerOptions;
+    let mut wait_stream = docker.wait_container(&container.id, None::<WaitContainerOptions<String>>);
+    
+    while let Some(wait_result) = wait_stream.next().await {
+        if let Ok(result) = wait_result {
+            if result.status_code != 0 {
+                // Limpiar contenedor
+                let _ = docker.remove_container(&container.id, None).await;
+                return Err(format!("Restore failed with status code: {}", result.status_code));
+            }
+            break;
+        }
+    }
+    
+    // Limpiar contenedor temporal
+    docker
+        .remove_container(&container.id, Some(RemoveContainerOptions {
+            force: true,
+            ..Default::default()
+        }))
+        .await
+        .map_err(|e| format!("Failed to remove restore container: {}", e))?;
+    
+    Ok(format!("Volume '{}' restored successfully from {}", volume_name, backup_file))
+}
+
+// Helper function para formatear tamaños
+fn format_size(bytes: i64) -> String {
+    const KB: i64 = 1024;
+    const MB: i64 = KB * 1024;
+    const GB: i64 = MB * 1024;
+    
+    if bytes >= GB {
+        format!("{:.2} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.2} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.2} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
+    }
 }

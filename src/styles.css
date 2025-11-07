@@ -67,6 +67,13 @@ body {
   position: sticky;
   top: 0;
   z-index: 50;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Cuando scrolleas, el header se esconde hacia arriba */
+body.scrolled .header {
+  transform: translateY(-100%);
+  pointer-events: none;
 }
 
 .header h1 {
@@ -102,7 +109,7 @@ body {
 
 /* ===== STATUS BAR ===== */
 .status-bar {
-  background: rgba(30, 41, 59, 0.5);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 0.625rem 2rem;
   display: flex;
@@ -110,6 +117,16 @@ body {
   align-items: center;
   font-size: 0.875rem;
   color: var(--text-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  transition: top 0.3s ease;
+  backdrop-filter: blur(8px);
+}
+
+/* Cuando scrolleas, el status bar sube a top 0 */
+body.scrolled .status-bar {
+  top: 0;
 }
 
 #docker-status {
@@ -304,6 +321,13 @@ body {
   position: sticky;
   top: 115px;
   z-index: 40;
+  transition: top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+}
+
+/* Cuando scrolleas, los tabs suben justo después del status bar */
+body.scrolled .tabs-nav {
+  top: 41px; /* Altura del status bar */
 }
 
 .tab-btn {
@@ -2947,4 +2971,181 @@ button span,
 .tippy-box[data-theme~='custom'] ~ [data-tooltip]:hover::before,
 .tippy-box[data-theme~='custom'] ~ [data-tooltip]:hover::after {
   display: none !important;
+}
+
+/* ===== VOLUMES SECTION ===== */
+.volumes-section {
+  padding: 2rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.section-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.volumes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1.5rem;
+}
+
+.volume-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  transition: var(--transition);
+}
+
+.volume-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.volume-card.orphan {
+  border-left: 3px solid var(--warning);
+}
+
+.volume-card.in-use {
+  border-left: 3px solid var(--success);
+}
+
+.volume-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.volume-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  color: var(--primary);
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.volume-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.volume-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.25rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.volume-meta {
+  font-size: 0.813rem;
+  color: var(--text-secondary);
+}
+
+.volume-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.volume-status-in-use {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.volume-status-orphan {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+.volume-data {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.volume-data-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  gap: 1rem;
+}
+
+.volume-data-item[onclick] {
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.volume-data-item[onclick]:hover {
+  background: var(--bg-tertiary);
+}
+
+.volume-data-label {
+  font-size: 0.813rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.volume-data-value {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+
+.volume-path {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 250px;
+}
+
+.volume-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .volumes-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .section-header {
+    flex-direction: column;
+  }
+  
+  .section-actions {
+    width: 100%;
+  }
+  
+  .section-actions button {
+    flex: 1;
+  }
 }

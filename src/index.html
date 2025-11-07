@@ -83,6 +83,14 @@
             <span class="tab-icon"></span>
             <span>Migration</span>
           </button>
+          <button
+            class="tab-btn"
+            data-tab="volumes"
+            onclick="switchTab('volumes')"
+          >
+            <span class="tab-icon"></span>
+            <span>Volumes</span>
+          </button>
         </nav>
 
         <!-- Tab: Dashboard -->
@@ -329,6 +337,34 @@
             </div>
           </div>
         </section>
+
+        <!-- Tab: Volumes -->
+        <section id="tab-volumes" class="tab-content">
+          <div class="volumes-section">
+            <div class="section-header">
+              <div>
+                <h2>Docker Volumes</h2>
+                <p class="section-description">Manage Docker volumes, create backups, and restore data</p>
+              </div>
+              <div class="section-actions">
+                <button id="refresh-volumes-btn" class="btn btn-ghost" onclick="loadVolumes()" data-tooltip="Refresh volumes">
+                  Refresh
+                </button>
+                <button id="prune-volumes-btn" class="btn btn-warning" onclick="confirmPruneVolumes()" data-tooltip="Remove unused volumes">
+                  Clean Orphans
+                </button>
+              </div>
+            </div>
+
+            <!-- Volumes List -->
+            <div id="volumes-list" class="volumes-grid">
+              <!-- Volumes will be loaded here -->
+            </div>
+            <div id="no-volumes" class="no-data" style="display: none">
+              <p>No volumes found</p>
+            </div>
+          </div>
+        </section>
       </main>
 
       <!-- Modal: Create Database -->
@@ -470,6 +506,66 @@
     <div id="loading-overlay" class="loading-overlay" style="display: none">
       <div class="spinner"></div>
       <p id="loading-text">Loading...</p>
+    </div>
+
+    <!-- Backup Volume Modal -->
+    <div id="backup-volume-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Backup Volume</h3>
+          <button class="modal-close" onclick="closeBackupVolumeModal()">×</button>
+        </div>
+        <form id="backup-volume-form" onsubmit="executeBackupVolume(event)">
+          <div class="modal-body">
+            <p>Create a backup of volume: <strong id="backup-volume-name"></strong></p>
+            <div class="form-group">
+              <label for="backup-path">Backup Directory:</label>
+              <input 
+                type="text" 
+                id="backup-path" 
+                required 
+                placeholder="/path/to/backup/directory"
+                autocomplete="off"
+              />
+              <small>The backup will be saved as volume-backup.tar.gz in this directory</small>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeBackupVolumeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Backup</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Restore Volume Modal -->
+    <div id="restore-volume-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Restore Volume</h3>
+          <button class="modal-close" onclick="closeRestoreVolumeModal()">×</button>
+        </div>
+        <form id="restore-volume-form" onsubmit="executeRestoreVolume(event)">
+          <div class="modal-body">
+            <p>Restore data to volume: <strong id="restore-volume-name"></strong></p>
+            <div class="form-group">
+              <label for="restore-file">Backup File (.tar.gz):</label>
+              <input 
+                type="text" 
+                id="restore-file" 
+                required 
+                placeholder="/path/to/volume-backup.tar.gz"
+                autocomplete="off"
+              />
+              <small>⚠️ This will replace all data in the volume</small>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeRestoreVolumeModal()">Cancel</button>
+            <button type="submit" class="btn btn-warning">Restore Volume</button>
+          </div>
+        </form>
+      </div>
     </div>
   </body>
 </html>
