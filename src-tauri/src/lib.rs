@@ -669,7 +669,10 @@ pub fn run() {
             remove_volume,
             prune_volumes,
             backup_volume,
-            restore_volume
+            restore_volume,
+            get_container_stats,
+            get_all_containers_stats,
+            check_resource_alerts
         ])
         .run(tauri::generate_context!())
         .expect("error running app");
@@ -2050,4 +2053,182 @@ fn format_size(bytes: i64) -> String {
     } else {
         format!("{} B", bytes)
     }
+}
+
+// ==================== MONITORING & STATS ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContainerStats {
+    container_id: String,
+    container_name: String,
+    cpu_percentage: f64,
+    memory_usage: u64,
+    memory_limit: u64,
+    memory_percentage: f64,
+    network_rx_bytes: u64,
+    network_tx_bytes: u64,
+    block_read_bytes: u64,
+    block_write_bytes: u64,
+    timestamp: String,
+}
+
+#[tauri::command]
+async fn get_container_stats(
+    container_id: String,
+    docker_state: State<'_, AppState>,
+) -> Result<ContainerStats, String> {
+    use bollard::container::StatsOptions;
+    
+    let docker = docker_state.docker.lock().await;
+    
+    // Obtener info del contenedor
+    let container_info = docker
+        .inspect_container(&container_id, None)
+        .await
+        .map_err(|e| format!("Failed to inspect container: {}", e))?;
+    
+    let container_name = container_info
+        .name
+        .unwrap_or_else(|| container_id.clone())
+        .trim_start_matches('/')
+        .to_string();
+    
+    // Obtener stats (stream=false para un solo snapshot)
+    let mut stats_stream = docker.stats(
+        &container_id,
+        Some(StatsOptions {
+            stream: false,
+            one_shot: true,
+        }),
+    );
+    
+    if let Some(stats_result) = stats_stream.next().await {
+        let stats = stats_result.map_err(|e| format!("Failed to get stats: {}", e))?;
+        
+        // Calcular CPU percentage
+        let cpu_delta = stats.cpu_stats.cpu_usage.total_usage as f64
+            - stats.precpu_stats.cpu_usage.total_usage as f64;
+        let system_delta = stats.cpu_stats.system_cpu_usage.unwrap_or(0) as f64
+            - stats.precpu_stats.system_cpu_usage.unwrap_or(0) as f64;
+        let cpu_percentage = if system_delta > 0.0 && cpu_delta > 0.0 {
+            let num_cpus = stats.cpu_stats.online_cpus.unwrap_or(1) as f64;
+            (cpu_delta / system_delta) * num_cpus * 100.0
+        } else {
+            0.0
+        };
+        
+        // Memory stats
+        let memory_usage = stats.memory_stats.usage.unwrap_or(0);
+        let memory_limit = stats.memory_stats.limit.unwrap_or(0);
+        let memory_percentage = if memory_limit > 0 {
+            (memory_usage as f64 / memory_limit as f64) * 100.0
+        } else {
+            0.0
+        };
+        
+        // Network stats
+        let (network_rx, network_tx) = if let Some(networks) = stats.networks {
+            let rx: u64 = networks.values().map(|n| n.rx_bytes).sum();
+            let tx: u64 = networks.values().map(|n| n.tx_bytes).sum();
+            (rx, tx)
+        } else {
+            (0, 0)
+        };
+        
+        // Block I/O stats
+        let (block_read, block_write) = if let Some(io_stats) = stats.blkio_stats.io_service_bytes_recursive {
+            let read: u64 = io_stats
+                .iter()
+                .filter(|s| s.op == "read" || s.op == "Read")
+                .map(|s| s.value)
+                .sum();
+            let write: u64 = io_stats
+                .iter()
+                .filter(|s| s.op == "write" || s.op == "Write")
+                .map(|s| s.value)
+                .sum();
+            (read, write)
+        } else {
+            (0, 0)
+        };
+        
+        Ok(ContainerStats {
+            container_id: container_id.clone(),
+            container_name,
+            cpu_percentage: (cpu_percentage * 100.0).round() / 100.0, // Redondear a 2 decimales
+            memory_usage,
+            memory_limit,
+            memory_percentage: (memory_percentage * 100.0).round() / 100.0,
+            network_rx_bytes: network_rx,
+            network_tx_bytes: network_tx,
+            block_read_bytes: block_read,
+            block_write_bytes: block_write,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })
+    } else {
+        Err("No stats available for container".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_all_containers_stats(
+    docker_state: State<'_, AppState>,
+) -> Result<Vec<ContainerStats>, String> {
+    let docker = docker_state.docker.lock().await;
+    
+    // Listar todos los contenedores en ejecución
+    let containers = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: false, // Solo contenedores en ejecución
+            ..Default::default()
+        }))
+        .await
+        .map_err(|e| format!("Failed to list containers: {}", e))?;
+    
+    drop(docker); // Liberar el lock
+    
+    let mut all_stats = Vec::new();
+    
+    for container in containers {
+        if let Some(id) = &container.id {
+            match get_container_stats(id.clone(), docker_state.clone()).await {
+                Ok(stats) => all_stats.push(stats),
+                Err(e) => {
+                    eprintln!("Failed to get stats for container {}: {}", id, e);
+                    // Continuar con los demás contenedores
+                }
+            }
+        }
+    }
+    
+    Ok(all_stats)
+}
+
+#[tauri::command]
+async fn check_resource_alerts(
+    cpu_threshold: f64,
+    memory_threshold: f64,
+    docker_state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let stats = get_all_containers_stats(docker_state).await?;
+    
+    let mut alerts = Vec::new();
+    
+    for stat in stats {
+        if stat.cpu_percentage > cpu_threshold {
+            alerts.push(format!(
+                "⚠️ {} - High CPU usage: {:.2}%",
+                stat.container_name, stat.cpu_percentage
+            ));
+        }
+        
+        if stat.memory_percentage > memory_threshold {
+            alerts.push(format!(
+                "⚠️ {} - High Memory usage: {:.2}%",
+                stat.container_name, stat.memory_percentage
+            ));
+        }
+    }
+    
+    Ok(alerts)
 }

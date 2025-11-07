@@ -1,6 +1,7 @@
 // Import icons and components
 import { getIcon } from './icons.js';
 import { SearchFilters } from './components/SearchFilters.js';
+import { loadChart } from './chart-loader.js';
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -240,6 +241,9 @@ async function loadContainers(applyFilters = false) {
           ${
             c.status === 'running'
               ? `
+            <button class="db-action-btn db-btn-monitor" onclick="openMonitoringModal('${c.id}', '${c.name}')" data-tooltip="Monitor resources">
+              ${getIcon('chartBar')}
+            </button>
             <button class="db-action-btn db-btn-stop" onclick="stopC('${c.id}')" data-tooltip="Stop container">
               ${getIcon('pause')}
             </button>
@@ -1595,7 +1599,7 @@ async function loadVolumes() {
 
 function confirmRemoveVolume(volumeName, inUse) {
   const warningMsg = inUse
-    ? '⚠️ This volume is currently in use by containers. This may cause data loss.'
+    ? 'WARNING: This volume is currently in use by containers. This may cause data loss.'
     : '';
   
   const modal = document.createElement('div');
@@ -1604,7 +1608,7 @@ function confirmRemoveVolume(volumeName, inUse) {
     <div class="confirm-modal-content">
       <div class="confirm-modal-header">
         <h3>Delete Volume</h3>
-        <button class="confirm-modal-close" onclick="this.closest('.confirm-modal').remove()">×</button>
+        <button class="confirm-modal-close" onclick="this.closest('.confirm-modal').remove()">&times;</button>
       </div>
       <div class="confirm-modal-body">
         <p>Are you sure you want to delete volume <strong>${volumeName}</strong>?</p>
@@ -1710,7 +1714,7 @@ async function executeRestoreVolume(e) {
   e.preventDefault();
   const backupFile = document.getElementById('restore-file').value;
   
-  if (!confirm(`Are you sure you want to restore volume "${currentVolume}"?\n\n⚠️ This will REPLACE all existing data in the volume.`)) {
+  if (!confirm(`Are you sure you want to restore volume "${currentVolume}"?\n\nWARNING: This will REPLACE all existing data in the volume.`)) {
     return;
   }
   
@@ -1742,3 +1746,229 @@ window.executeBackupVolume = executeBackupVolume;
 window.openRestoreVolumeModal = openRestoreVolumeModal;
 window.closeRestoreVolumeModal = closeRestoreVolumeModal;
 window.executeRestoreVolume = executeRestoreVolume;
+
+// ===== MONITORING =====
+let currentMonitoringContainer = null;
+let monitoringInterval = null;
+let cpuChart = null;
+let memoryChart = null;
+let cpuHistory = [];
+let memoryHistory = [];
+const MAX_HISTORY_POINTS = 30; // 30 puntos
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+async function openMonitoringModal(containerId, containerName) {
+  currentMonitoringContainer = containerId;
+  document.getElementById('monitoring-container-name').textContent = containerName;
+  document.getElementById('monitoring-modal').classList.add('active');
+  
+  // Reset historiales
+  cpuHistory = [];
+  memoryHistory = [];
+  
+  try {
+    // Cargar Chart.js
+    const Chart = await loadChart();
+    window.Chart = Chart;
+    
+    // Inicializar gráficas
+    initializeCharts();
+    
+    // Cargar stats iniciales
+    await updateMonitoringStats();
+    
+    // Actualizar cada 2 segundos
+    monitoringInterval = setInterval(updateMonitoringStats, 2000);
+  } catch (e) {
+    console.error('Error loading charts:', e);
+    // Continuar sin gráficas
+    await updateMonitoringStats();
+    monitoringInterval = setInterval(updateMonitoringStats, 2000);
+    showNotification('Charts unavailable, showing stats only', 'warning');
+  }
+}
+
+function closeMonitoringModal() {
+  document.getElementById('monitoring-modal').classList.remove('active');
+  
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+    monitoringInterval = null;
+  }
+  
+  // Destruir gráficas
+  if (cpuChart) {
+    cpuChart.destroy();
+    cpuChart = null;
+  }
+  if (memoryChart) {
+    memoryChart.destroy();
+    memoryChart = null;
+  }
+  
+  currentMonitoringContainer = null;
+}
+
+function initializeCharts() {
+  if (!window.Chart) {
+    console.warn('Chart.js not available');
+    return;
+  }
+  
+  const Chart = window.Chart;
+  
+  // Destruir gráficas existentes
+  if (cpuChart) cpuChart.destroy();
+  if (memoryChart) memoryChart.destroy();
+  
+  const cpuCtx = document.getElementById('cpu-chart').getContext('2d');
+  const memoryCtx = document.getElementById('memory-chart').getContext('2d');
+  
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 100,
+        ticks: {
+          callback: (value) => value + '%',
+          color: '#94a3b8'
+        },
+        grid: {
+          color: 'rgba(148, 163, 184, 0.1)'
+        }
+      },
+      x: {
+        ticks: {
+          color: '#94a3b8'
+        },
+        grid: {
+          color: 'rgba(148, 163, 184, 0.1)'
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        display: false
+      }
+    }
+  };
+  
+  cpuChart = new Chart(cpuCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'CPU %',
+        data: [],
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: chartOptions
+  });
+  
+  memoryChart = new Chart(memoryCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Memory %',
+        data: [],
+        borderColor: '#8b5cf6',
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: chartOptions
+  });
+}
+
+async function updateMonitoringStats() {
+  if (!currentMonitoringContainer) return;
+  
+  try {
+    const stats = await invoke('get_container_stats', {
+      containerId: currentMonitoringContainer
+    });
+    
+    // Actualizar cards
+    document.getElementById('monitor-cpu').textContent = stats.cpu_percentage.toFixed(2) + '%';
+    document.getElementById('monitor-memory').textContent = formatBytes(stats.memory_usage);
+    document.getElementById('monitor-memory-percent').textContent = stats.memory_percentage.toFixed(2) + '%';
+    document.getElementById('monitor-network-rx').textContent = formatBytes(stats.network_rx_bytes);
+    document.getElementById('monitor-network-tx').textContent = formatBytes(stats.network_tx_bytes);
+    document.getElementById('monitor-disk-read').textContent = formatBytes(stats.block_read_bytes);
+    document.getElementById('monitor-disk-write').textContent = formatBytes(stats.block_write_bytes);
+    
+    // Añadir a historial
+    cpuHistory.push(stats.cpu_percentage);
+    memoryHistory.push(stats.memory_percentage);
+    
+    // Limitar historial
+    if (cpuHistory.length > MAX_HISTORY_POINTS) {
+      cpuHistory.shift();
+      memoryHistory.shift();
+    }
+    
+    // Actualizar gráficas si existen
+    if (window.Chart && cpuChart && memoryChart) {
+      const now = new Date();
+      const timeLabel = now.toLocaleTimeString();
+      const labels = Array(cpuHistory.length).fill('').map((_, i) => i === cpuHistory.length - 1 ? timeLabel : '');
+      
+      cpuChart.data.labels = labels;
+      cpuChart.data.datasets[0].data = cpuHistory;
+      cpuChart.update('none'); // Sin animación
+      
+      memoryChart.data.labels = labels;
+      memoryChart.data.datasets[0].data = memoryHistory;
+      memoryChart.update('none'); // Sin animación
+    }
+    
+    // Verificar alertas
+    checkAlerts(stats);
+    
+  } catch (e) {
+    console.error('Error updating monitoring stats:', e);
+    showNotification('Error getting container stats: ' + e, 'error');
+  }
+}
+
+function checkAlerts(stats) {
+  const alertsContainer = document.getElementById('monitoring-alerts');
+  const alerts = [];
+  
+  if (stats.cpu_percentage > 80) {
+    alerts.push(`WARNING: High CPU usage: ${stats.cpu_percentage.toFixed(2)}%`);
+  }
+  
+  if (stats.memory_percentage > 85) {
+    alerts.push(`WARNING: High Memory usage: ${stats.memory_percentage.toFixed(2)}%`);
+  }
+  
+  if (alerts.length > 0) {
+    alertsContainer.innerHTML = alerts.map(alert => 
+      `<div class="alert alert-warning">${alert}</div>`
+    ).join('');
+    alertsContainer.style.display = 'block';
+  } else {
+    alertsContainer.style.display = 'none';
+  }
+}
+
+// Exponer funciones globalmente
+window.openMonitoringModal = openMonitoringModal;
+window.closeMonitoringModal = closeMonitoringModal;
