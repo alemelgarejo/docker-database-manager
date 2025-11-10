@@ -20,7 +20,9 @@ export class TabManager {
    * Notify listeners of tab change
    */
   notifyChange() {
-    this.listeners.forEach(callback => callback(this.currentTab));
+    this.listeners.forEach((callback) => {
+      callback(this.currentTab);
+    });
   }
 
   /**
