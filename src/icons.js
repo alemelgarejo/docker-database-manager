@@ -63,6 +63,10 @@ export const icons = {
 
   eye: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
 
+  copy: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+
+  link: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+
   // Database type icons - Proper brand-inspired designs
   postgresql:
     '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="currentColor"><path d="M24.5 10.5c-1-1.5-2.5-2.5-4.5-3v-1c0-1.5-1.5-3-3.5-3S13 5 13 6.5v1c-2 .5-3.5 1.5-4.5 3-.5 1-.5 2-.5 3 0 2.5.5 5 1.5 7 .5 1 1 2 1.5 2.5.5.5 1 1 1.5 1.5v3c0 .5.5 1 1 1h4c.5 0 1-.5 1-1v-3c.5-.5 1-1 1.5-1.5s1-1.5 1.5-2.5c1-2 1.5-4.5 1.5-7 0-1 0-2-.5-3zm-8.5 14c-.5 0-1 .5-1 1s.5 1 1 1 1-.5 1-1-.5-1-1-1zm0-17c.5 0 1 .5 1 1v.5c-.5 0-1 0-1 .5s.5.5 1 .5v1h-2v-1c.5 0 1 0 1-.5s-.5-.5-1-.5V8.5c0-.5.5-1 1-1z"/></svg>',
