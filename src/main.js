@@ -5,6 +5,7 @@ import { loadChart } from './chart-loader.js';
 import { templatesManager } from './components/Templates.js';
 import { getAllTemplates, applyTemplate, saveCustomTemplate } from './templates.js';
 import { CustomSelect } from './components/CustomSelect.js';
+import { DockerCompose } from './components/DockerCompose.js';
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -38,6 +39,7 @@ let invoke, check, ask, relaunch;
 let searchFilters = null;
 let imagesSearchFilters = null;
 let migrationSearchFilters = null;
+let composeManager = null;
 let allContainers = []; // Cache de todos los contenedores
 let allImages = []; // Cache de todas las imágenes
 
@@ -1072,6 +1074,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       else if (tabName === 'images') iconName = 'package';
       else if (tabName === 'migration') iconName = 'package';
       else if (tabName === 'volumes') iconName = 'folder';
+      else if (tabName === 'compose') iconName = 'layers';
+      else if (tabName === 'templates') iconName = 'fileText';
 
       const text = btn.querySelector('span:last-child')?.textContent || '';
       if (text) {
@@ -1188,6 +1192,8 @@ window.switchTab = (tabName) => {
     loadMigratedDatabases();
   } else if (tabName === 'volumes') {
     loadVolumes();
+  } else if (tabName === 'compose') {
+    loadComposeTab();
   } else if (tabName === 'templates') {
     loadTemplatesTab();
   }
@@ -2145,6 +2151,18 @@ let selectedTemplateForDb = null;
 let templateSelect = null;
 let versionSelect = null;
 
+function loadComposeTab() {
+  if (!composeManager) {
+    composeManager = new DockerCompose(invoke, showNotification, showLoading, hideLoading);
+    window.composeManager = composeManager;
+  }
+  const content = document.getElementById('compose-tab-content');
+  if (content) {
+    content.innerHTML = composeManager.render();
+    composeManager.loadProjects();
+  }
+}
+
 function loadTemplatesTab() {
   templatesManager.render('templates-tab-content');
 }
@@ -2350,6 +2368,54 @@ window.handleCreateTemplate = async (e) => {
     showNotification(error.message, 'error');
   }
 };
+
+// ===== PULL IMAGE MODAL =====
+function openPullImageModal() {
+  document.getElementById('pull-image-modal').classList.add('active');
+  document.getElementById('image-name').value = '';
+  document.getElementById('image-name').focus();
+}
+
+function closePullImageModal() {
+  document.getElementById('pull-image-modal').classList.remove('active');
+}
+
+async function handlePullImage(e) {
+  e.preventDefault();
+  
+  const imageName = document.getElementById('image-name').value.trim();
+  
+  if (!imageName) {
+    showNotification('Please enter an image name', 'warning');
+    return;
+  }
+
+  showLoading(`Pulling ${imageName}...`);
+  closePullImageModal();
+
+  try {
+    // Por ahora, mostrar que la funcionalidad está disponible al crear una database
+    // ya que create_database hace pull automáticamente
+    showNotification(
+      'Note: Images are automatically pulled when creating databases. ' +
+      'To pull custom images, use "docker pull ' + imageName + '" in terminal.',
+      'info'
+    );
+    
+    // TODO: Implementar comando pull_image en el backend si se necesita
+    // await invoke('pull_image', { imageName });
+    
+    await loadImages(); // Recargar la lista de imágenes
+  } catch (error) {
+    showNotification(`Error: ${error}`, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+window.openPullImageModal = openPullImageModal;
+window.closePullImageModal = closePullImageModal;
+window.handlePullImage = handlePullImage;
 
 // Expose functions globally
 window.loadTemplatesTab = loadTemplatesTab;

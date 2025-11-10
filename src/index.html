@@ -93,6 +93,14 @@
           </button>
           <button
             class="tab-btn"
+            data-tab="compose"
+            onclick="switchTab('compose')"
+          >
+            <span class="tab-icon"></span>
+            <span>Compose</span>
+          </button>
+          <button
+            class="tab-btn"
             data-tab="templates"
             onclick="switchTab('templates')"
           >
@@ -194,7 +202,15 @@
         <!-- Tab: Databases -->
         <section id="tab-databases" class="tab-content">
           <div class="containers-section">
-            <h2 data-i18n="dockerDatabases">Docker Databases</h2>
+            <div class="section-header">
+              <h2 data-i18n="dockerDatabases">Docker Databases</h2>
+              <button class="btn btn-primary" onclick="openCreateModal()" data-tooltip="Create new database">
+                <span class="icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                </span>
+                <span>Create Database</span>
+              </button>
+            </div>
             
             <!-- Search and Filters Component -->
             <div id="search-filters">
@@ -217,7 +233,15 @@
         <!-- Tab: Images -->
         <section id="tab-images" class="tab-content">
           <div class="containers-section">
-            <h2 data-i18n="dockerImages">Docker Images</h2>
+            <div class="section-header">
+              <h2 data-i18n="dockerImages">Docker Images</h2>
+              <button class="btn btn-primary" onclick="openPullImageModal()" data-tooltip="Pull new image">
+                <span class="icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </span>
+                <span>Pull Image</span>
+              </button>
+            </div>
             
             <!-- Search and Filters Component -->
             <div id="search-filters-images">
@@ -377,6 +401,13 @@
             <div id="no-volumes" class="no-data" style="display: none">
               <p>No volumes found</p>
             </div>
+          </div>
+        </section>
+
+        <!-- Tab: Compose -->
+        <section id="tab-compose" class="tab-content">
+          <div id="compose-tab-content">
+            <!-- Compose content will be loaded here -->
           </div>
         </section>
 
@@ -716,6 +747,40 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-ghost" onclick="closeCreateTemplateModal()">Cancel</button>
             <button type="submit" class="btn btn-primary">Save Template</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Pull Docker Image -->
+    <div id="pull-image-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Pull Docker Image</h2>
+          <button class="modal-close" onclick="closePullImageModal()">×</button>
+        </div>
+        <form id="pull-image-form" class="modal-body" onsubmit="handlePullImage(event)">
+          <div class="form-group">
+            <label for="image-name">Image Name</label>
+            <input
+              type="text"
+              id="image-name"
+              placeholder="e.g., postgres:15, nginx:latest, redis:7"
+              required
+            />
+            <small>Enter the full image name with tag (e.g., postgres:15)</small>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closePullImageModal()">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              <span class="icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </span>
+              <span>Pull Image</span>
+            </button>
           </div>
         </form>
       </div>

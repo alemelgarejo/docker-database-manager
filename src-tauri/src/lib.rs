@@ -670,7 +670,13 @@ pub fn run() {
             restore_volume,
             get_container_stats,
             get_all_containers_stats,
-            check_resource_alerts
+            check_resource_alerts,
+            parse_compose_file,
+            generate_compose_from_containers,
+            deploy_compose_file,
+            list_compose_projects,
+            stop_compose_project,
+            remove_compose_project
         ])
         .run(tauri::generate_context!())
         .expect("error running app");
@@ -2229,4 +2235,590 @@ async fn check_resource_alerts(
     }
     
     Ok(alerts)
+}
+
+// ===== DOCKER COMPOSE INTEGRATION =====
+
+/// Represents a Docker Compose service configuration
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ComposeService {
+    pub image: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ports: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volumes: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub networks: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depends_on: Option<Vec<String>>,
+}
+
+/// Represents a Docker Compose configuration file
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ComposeConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    pub services: HashMap<String, ComposeService>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volumes: Option<HashMap<String, serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub networks: Option<HashMap<String, serde_json::Value>>,
+}
+
+/// Represents a Docker Compose project status
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ComposeProject {
+    pub name: String,
+    pub services: Vec<ComposeServiceStatus>,
+    pub created_at: String,
+}
+
+/// Represents the status of a compose service
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ComposeServiceStatus {
+    pub name: String,
+    pub container_id: String,
+    pub container_name: String,
+    pub status: String,
+    pub image: String,
+}
+
+/// Parse a docker-compose.yml file content
+/// 
+/// # Arguments
+/// * `yaml_content` - The YAML content as a string
+/// 
+/// # Returns
+/// * `Ok(ComposeConfig)` - Parsed compose configuration
+/// * `Err(String)` - Error message if parsing fails
+#[tauri::command]
+async fn parse_compose_file(yaml_content: String) -> Result<ComposeConfig, String> {
+    serde_yaml::from_str(&yaml_content)
+        .map_err(|e| format!("Failed to parse compose file: {}", e))
+}
+
+/// Generate a docker-compose.yml content from existing containers
+/// 
+/// # Arguments
+/// * `container_ids` - List of container IDs to include
+/// * `docker_state` - Docker state
+/// 
+/// # Returns
+/// * `Ok(String)` - Generated YAML content
+/// * `Err(String)` - Error message if generation fails
+#[tauri::command]
+async fn generate_compose_from_containers(
+    container_ids: Vec<String>,
+    docker_state: State<'_, AppState>,
+) -> Result<String, String> {
+    let docker = docker_state.docker.lock().await;
+    let mut services = HashMap::new();
+    let mut volumes_set = std::collections::HashSet::new();
+
+    for container_id in container_ids {
+        let inspect = docker
+            .inspect_container(&container_id, None)
+            .await
+            .map_err(|e| format!("Failed to inspect container {}: {}", container_id, e))?;
+
+        let config = inspect.config.ok_or("Container config not found")?;
+        let name = inspect.name.ok_or("Container name not found")?;
+        let service_name = name.trim_start_matches('/').to_string();
+
+        // Extract image
+        let image = config.image.ok_or("Container image not found")?;
+
+        // Extract ports
+        let ports: Option<Vec<String>> = inspect.host_config.and_then(|hc| {
+            hc.port_bindings.map(|pb| {
+                pb.iter()
+                    .filter_map(|(container_port, bindings)| {
+                        bindings.as_ref().and_then(|b| {
+                            b.first().and_then(|binding| {
+                                binding.host_port.as_ref().map(|hp| {
+                                    format!("{}:{}", hp, container_port)
+                                })
+                            })
+                        })
+                    })
+                    .collect()
+            })
+        });
+
+        // Extract environment variables
+        let environment: Option<HashMap<String, String>> = config.env.map(|env_list| {
+            env_list
+                .iter()
+                .filter_map(|env| {
+                    let parts: Vec<&str> = env.splitn(2, '=').collect();
+                    if parts.len() == 2 {
+                        Some((parts[0].to_string(), parts[1].to_string()))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        });
+
+        // Extract volumes
+        let volumes: Option<Vec<String>> = inspect.mounts.map(|mounts| {
+            mounts
+                .iter()
+                .filter_map(|mount| {
+                    if let (Some(source), Some(destination)) = (&mount.source, &mount.destination) {
+                        // Track named volumes
+                        if let Some(ref typ) = mount.typ {
+                            if typ == &bollard::secret::MountPointTypeEnum::VOLUME {
+                                if let Some(name) = &mount.name {
+                                    volumes_set.insert(name.clone());
+                                }
+                            }
+                        }
+                        Some(format!("{}:{}", source, destination))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        });
+
+        let service = ComposeService {
+            image,
+            container_name: Some(service_name.clone()),
+            ports,
+            environment,
+            volumes,
+            networks: None,
+            restart: Some("unless-stopped".to_string()),
+            depends_on: None,
+        };
+
+        services.insert(service_name, service);
+    }
+
+    // Create volumes section
+    let volumes = if !volumes_set.is_empty() {
+        let mut vols = HashMap::new();
+        for vol in volumes_set {
+            vols.insert(vol, serde_json::json!({}));
+        }
+        Some(vols)
+    } else {
+        None
+    };
+
+    let compose_config = ComposeConfig {
+        version: Some("3.8".to_string()),
+        services,
+        volumes,
+        networks: None,
+    };
+
+    serde_yaml::to_string(&compose_config)
+        .map_err(|e| format!("Failed to generate YAML: {}", e))
+}
+
+/// Deploy a docker-compose file
+/// 
+/// # Arguments
+/// * `yaml_content` - The compose file content
+/// * `project_name` - Name for the compose project
+/// * `docker_state` - Docker state
+/// 
+/// # Returns
+/// * `Ok(Vec<String>)` - List of created container IDs
+/// * `Err(String)` - Error message if deployment fails
+#[tauri::command]
+async fn deploy_compose_file(
+    yaml_content: String,
+    project_name: String,
+    docker_state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let compose_config: ComposeConfig = serde_yaml::from_str(&yaml_content)
+        .map_err(|e| format!("Failed to parse compose file: {}", e))?;
+
+    let docker = docker_state.docker.lock().await;
+    let mut created_containers = Vec::new();
+
+    // Create volumes first
+    if let Some(volumes) = &compose_config.volumes {
+        for volume_name in volumes.keys() {
+            let full_volume_name = format!("{}_{}", project_name, volume_name);
+            let volume_config = bollard::volume::CreateVolumeOptions {
+                name: full_volume_name.clone(),
+                driver: "local".to_string(),
+                ..Default::default()
+            };
+
+            match docker.create_volume(volume_config).await {
+                Ok(_) => println!("Created volume: {}", full_volume_name),
+                Err(e) => {
+                    // Volume might already exist, that's ok
+                    println!("Volume creation note: {}", e);
+                }
+            }
+        }
+    }
+
+    // Create networks first
+    if let Some(networks) = &compose_config.networks {
+        for network_name in networks.keys() {
+            let full_network_name = format!("{}_{}", project_name, network_name);
+            let network_config = bollard::network::CreateNetworkOptions {
+                name: full_network_name.clone(),
+                driver: "bridge".to_string(),
+                ..Default::default()
+            };
+
+            match docker.create_network(network_config).await {
+                Ok(_) => println!("Created network: {}", full_network_name),
+                Err(e) => {
+                    // Network might already exist, that's ok
+                    println!("Network creation note: {}", e);
+                }
+            }
+        }
+    }
+
+    // Deploy each service
+    for (service_name, service_config) in &compose_config.services {
+        // Pull image if needed
+        let image = &service_config.image;
+        println!("Pulling image: {}", image);
+        
+        let create_image_options = Some(CreateImageOptions {
+            from_image: image.clone(),
+            ..Default::default()
+        });
+
+        let mut stream = docker.create_image(create_image_options, None, None);
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(_) => {},
+                Err(e) => println!("Image pull note: {}", e),
+            }
+        }
+
+        // Prepare container configuration
+        let container_name = service_config
+            .container_name
+            .clone()
+            .unwrap_or_else(|| format!("{}_{}", project_name, service_name));
+
+        // Parse port bindings
+        let mut port_bindings = HashMap::new();
+        let mut exposed_ports = HashMap::new();
+        
+        if let Some(ports) = &service_config.ports {
+            for port_mapping in ports {
+                if let Some((host_port, container_port)) = port_mapping.split_once(':') {
+                    let container_port_key = format!("{}/tcp", container_port);
+                    exposed_ports.insert(container_port_key.clone(), HashMap::new());
+                    port_bindings.insert(
+                        container_port_key,
+                        Some(vec![bollard::service::PortBinding {
+                            host_ip: Some("0.0.0.0".to_string()),
+                            host_port: Some(host_port.to_string()),
+                        }]),
+                    );
+                }
+            }
+        }
+
+        // Prepare environment variables
+        let env: Option<Vec<String>> = service_config.environment.as_ref().map(|env_map| {
+            env_map
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect()
+        });
+
+        // Prepare volumes (binds)
+        let binds: Option<Vec<String>> = service_config.volumes.as_ref().map(|vols| {
+            vols.iter()
+                .map(|v| {
+                    // Replace volume names with project-prefixed names
+                    if let Some(volumes) = &compose_config.volumes {
+                        for volume_name in volumes.keys() {
+                            if v.starts_with(&format!("{}:", volume_name)) {
+                                return v.replace(
+                                    &format!("{}:", volume_name),
+                                    &format!("{}_{}:", project_name, volume_name),
+                                );
+                            }
+                        }
+                    }
+                    v.clone()
+                })
+                .collect()
+        });
+
+        // Prepare restart policy
+        let restart_policy = service_config.restart.as_ref().map(|_r| {
+            bollard::service::RestartPolicy {
+                name: Some(bollard::service::RestartPolicyNameEnum::UNLESS_STOPPED),
+                maximum_retry_count: None,
+            }
+        });
+
+        // Create labels for compose tracking
+        let mut labels = HashMap::new();
+        labels.insert(
+            "com.docker.compose.project".to_string(),
+            project_name.clone(),
+        );
+        labels.insert(
+            "com.docker.compose.service".to_string(),
+            service_name.clone(),
+        );
+
+        let config = Config {
+            image: Some(image.clone()),
+            env,
+            exposed_ports: if exposed_ports.is_empty() {
+                None
+            } else {
+                Some(exposed_ports)
+            },
+            labels: Some(labels),
+            host_config: Some(bollard::service::HostConfig {
+                port_bindings: if port_bindings.is_empty() {
+                    None
+                } else {
+                    Some(port_bindings)
+                },
+                binds,
+                restart_policy,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        // Create container
+        let options = CreateContainerOptions {
+            name: container_name.clone(),
+            platform: None,
+        };
+
+        let container = docker
+            .create_container(Some(options), config)
+            .await
+            .map_err(|e| format!("Failed to create container {}: {}", service_name, e))?;
+
+        // Start container
+        docker
+            .start_container(&container.id, None::<StartContainerOptions<String>>)
+            .await
+            .map_err(|e| format!("Failed to start container {}: {}", service_name, e))?;
+
+        created_containers.push(container.id);
+        println!("Deployed service: {} ({})", service_name, container_name);
+    }
+
+    Ok(created_containers)
+}
+
+/// List all compose projects
+/// 
+/// # Arguments
+/// * `docker_state` - Docker state
+/// 
+/// # Returns
+/// * `Ok(Vec<ComposeProject>)` - List of compose projects
+/// * `Err(String)` - Error message if listing fails
+#[tauri::command]
+async fn list_compose_projects(
+    docker_state: State<'_, AppState>,
+) -> Result<Vec<ComposeProject>, String> {
+    let docker = docker_state.docker.lock().await;
+
+    let mut filters = HashMap::new();
+    filters.insert("label".to_string(), vec!["com.docker.compose.project".to_string()]);
+
+    let options = Some(ListContainersOptions {
+        all: true,
+        filters,
+        ..Default::default()
+    });
+
+    let containers = docker
+        .list_containers(options)
+        .await
+        .map_err(|e| format!("Failed to list containers: {}", e))?;
+
+    let mut projects: HashMap<String, Vec<ComposeServiceStatus>> = HashMap::new();
+
+    for container in containers {
+        if let Some(labels) = container.labels {
+            if let Some(project_name) = labels.get("com.docker.compose.project") {
+                if let Some(service_name) = labels.get("com.docker.compose.service") {
+                    let status = ComposeServiceStatus {
+                        name: service_name.clone(),
+                        container_id: container.id.clone().unwrap_or_default(),
+                        container_name: container
+                            .names
+                            .and_then(|n| n.first().map(|s| s.trim_start_matches('/').to_string()))
+                            .unwrap_or_default(),
+                        status: container.state.unwrap_or_default(),
+                        image: container.image.unwrap_or_default(),
+                    };
+
+                    projects
+                        .entry(project_name.clone())
+                        .or_insert_with(Vec::new)
+                        .push(status);
+                }
+            }
+        }
+    }
+
+    let compose_projects: Vec<ComposeProject> = projects
+        .into_iter()
+        .map(|(name, services)| ComposeProject {
+            name,
+            services,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        })
+        .collect();
+
+    Ok(compose_projects)
+}
+
+/// Stop all containers in a compose project
+/// 
+/// # Arguments
+/// * `project_name` - Name of the compose project
+/// * `docker_state` - Docker state
+/// 
+/// # Returns
+/// * `Ok(())` - Success
+/// * `Err(String)` - Error message if stopping fails
+#[tauri::command]
+async fn stop_compose_project(
+    project_name: String,
+    docker_state: State<'_, AppState>,
+) -> Result<(), String> {
+    let docker = docker_state.docker.lock().await;
+
+    let mut filters = HashMap::new();
+    filters.insert(
+        "label".to_string(),
+        vec![format!("com.docker.compose.project={}", project_name)],
+    );
+
+    let options = Some(ListContainersOptions {
+        all: false,
+        filters,
+        ..Default::default()
+    });
+
+    let containers = docker
+        .list_containers(options)
+        .await
+        .map_err(|e| format!("Failed to list containers: {}", e))?;
+
+    for container in containers {
+        if let Some(id) = container.id {
+            docker
+                .stop_container(&id, None)
+                .await
+                .map_err(|e| format!("Failed to stop container {}: {}", id, e))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Remove all containers in a compose project
+/// 
+/// # Arguments
+/// * `project_name` - Name of the compose project
+/// * `remove_volumes` - Whether to remove associated volumes
+/// * `docker_state` - Docker state
+/// 
+/// # Returns
+/// * `Ok(())` - Success
+/// * `Err(String)` - Error message if removal fails
+#[tauri::command]
+async fn remove_compose_project(
+    project_name: String,
+    remove_volumes: bool,
+    docker_state: State<'_, AppState>,
+) -> Result<(), String> {
+    let docker = docker_state.docker.lock().await;
+
+    let mut filters = HashMap::new();
+    filters.insert(
+        "label".to_string(),
+        vec![format!("com.docker.compose.project={}", project_name)],
+    );
+
+    let options = Some(ListContainersOptions {
+        all: true,
+        filters,
+        ..Default::default()
+    });
+
+    let containers = docker
+        .list_containers(options)
+        .await
+        .map_err(|e| format!("Failed to list containers: {}", e))?;
+
+    // Stop and remove containers
+    for container in containers {
+        if let Some(id) = container.id {
+            // Stop if running
+            let _ = docker.stop_container(&id, None).await;
+
+            // Remove container
+            let remove_options = Some(RemoveContainerOptions {
+                v: remove_volumes,
+                force: true,
+                ..Default::default()
+            });
+
+            docker
+                .remove_container(&id, remove_options)
+                .await
+                .map_err(|e| format!("Failed to remove container {}: {}", id, e))?;
+        }
+    }
+
+    // Remove project volumes if requested
+    if remove_volumes {
+        let volumes = docker
+            .list_volumes::<String>(None)
+            .await
+            .map_err(|e| format!("Failed to list volumes: {}", e))?;
+
+        if let Some(volumes_list) = volumes.volumes {
+            for volume in volumes_list {
+                if volume.name.starts_with(&format!("{}_", project_name)) {
+                    let _ = docker.remove_volume(&volume.name, None).await;
+                }
+            }
+        }
+
+        // Remove project networks
+        let networks = docker
+            .list_networks::<String>(None)
+            .await
+            .map_err(|e| format!("Failed to list networks: {}", e))?;
+
+        for network in networks {
+            if let Some(name) = network.name {
+                if name.starts_with(&format!("{}_", project_name)) {
+                    let _ = docker.remove_network(&name).await;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

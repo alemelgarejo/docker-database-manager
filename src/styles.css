@@ -3782,3 +3782,707 @@ button span,
 }
 
 
+
+
+/* ===== DOCKER COMPOSE STYLES ===== */
+
+/* Compose Container - Similar a containers-section */
+.compose-container {
+  padding: 2rem;
+}
+
+/* Compose Header - Alineación consistente */
+.compose-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 1rem;
+}
+
+.compose-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.125rem;
+  color: var(--text-primary);
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.compose-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Compose Projects List - Similar a containers-grid */
+.compose-projects-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Compose Project Card - Similar a db-card */
+.compose-project-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  position: relative;
+  will-change: transform;
+}
+
+.compose-project-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Project Header */
+.compose-project-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--border);
+  gap: 1rem;
+}
+
+.compose-project-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.compose-project-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+  border-radius: 10px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.compose-project-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.compose-project-title > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.compose-project-title h3 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-project-meta {
+  font-size: 0.813rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Status Badge */
+.compose-status {
+  padding: 0.375rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.688rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.compose-status-running {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.compose-status-stopped {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+}
+
+.compose-status-mixed {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+/* Services List */
+.compose-services {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.compose-service-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem;
+  background: var(--background);
+  border-radius: 8px;
+  font-size: 0.813rem;
+  transition: background 0.2s ease;
+}
+
+.compose-service-item:hover {
+  background: var(--surface-hover);
+}
+
+.service-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.service-status-running {
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.service-status-stopped {
+  background: var(--danger);
+}
+
+.service-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.service-image {
+  color: var(--text-secondary);
+  margin-left: auto;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Project Actions */
+.compose-project-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}
+
+/* YAML Editor */
+.yaml-editor {
+  width: 100%;
+  min-height: 300px;
+  padding: 1rem;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: #e2e8f0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  resize: vertical;
+  tab-size: 2;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.yaml-editor:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.yaml-editor::placeholder {
+  color: #64748b;
+}
+
+/* Compose Preview */
+.compose-preview {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.compose-preview h4 {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.preview-service {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  background: var(--surface);
+  margin-bottom: 0.25rem;
+}
+
+.preview-service:last-child {
+  margin-bottom: 0;
+}
+
+.preview-service svg {
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.preview-service strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Editor Actions */
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Modal Overrides for Compose */
+.modal-large {
+  max-width: 900px;
+  width: 95%;
+}
+
+.modal-large .modal-body {
+  padding: 1.5rem;
+  max-height: calc(90vh - 140px);
+}
+
+#compose-services-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* No Data State */
+.no-data {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.no-data-icon {
+  margin-bottom: 1.5rem;
+  opacity: 0.3;
+}
+
+.no-data-icon svg {
+  width: 64px;
+  height: 64px;
+}
+
+.no-data h3 {
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.no-data p {
+  color: var(--text-secondary);
+  font-size: 0.938rem;
+  margin: 0 0 2rem 0;
+  max-width: 400px;
+}
+
+.no-data-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Form Group Spacing - Removed duplicates, using global styles */
+
+/* Compose Modal Specific Styles */
+#import-compose-modal .form-group,
+#create-compose-modal .form-group,
+#generate-compose-modal .form-group {
+  margin-bottom: 1.5rem;
+}
+
+#import-compose-modal .form-group:last-child,
+#create-compose-modal .form-group:last-child,
+#generate-compose-modal .form-group:last-child {
+  margin-bottom: 0;
+}
+
+#import-compose-modal label,
+#create-compose-modal label,
+#generate-compose-modal label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+#import-compose-modal input[type="text"],
+#create-compose-modal input[type="text"],
+#generate-compose-modal input[type="text"] {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+#import-compose-modal input[type="text"]:focus,
+#create-compose-modal input[type="text"]:focus,
+#generate-compose-modal input[type="text"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+#import-compose-modal input[type="text"]::placeholder,
+#create-compose-modal input[type="text"]::placeholder,
+#generate-compose-modal input[type="text"]::placeholder {
+  color: var(--text-muted);
+}
+
+#import-compose-modal small,
+#create-compose-modal small,
+#generate-compose-modal small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.813rem;
+  line-height: 1.4;
+}
+
+/* Modal Actions - Specific for compose modals */
+#import-compose-modal .modal-actions,
+#create-compose-modal .modal-actions,
+#generate-compose-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+  flex-wrap: wrap;
+}
+
+#import-compose-modal .modal-actions button,
+#create-compose-modal .modal-actions button,
+#generate-compose-modal .modal-actions button {
+  min-width: 100px;
+}
+
+/* Editor Actions inside modals */
+.editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.editor-actions .btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.813rem;
+}
+
+/* Checkbox Label */
+.confirm-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 1rem;
+}
+
+.confirm-checkbox:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+}
+
+.confirm-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.confirm-checkbox span {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Confirm Modal Styles */
+.confirm-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.confirm-modal.active {
+  display: flex;
+  opacity: 1;
+}
+
+.confirm-modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  max-width: 500px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+}
+
+.confirm-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.confirm-modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.confirm-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.confirm-modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.confirm-modal-body {
+  padding: 1.5rem;
+}
+
+.confirm-modal-body p {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.confirm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .compose-container {
+    padding: 1rem;
+  }
+
+  .compose-projects-list {
+    grid-template-columns: 1fr;
+  }
+
+  .compose-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .compose-actions {
+    width: 100%;
+  }
+
+  .compose-actions button {
+    flex: 1;
+  }
+
+  .yaml-editor {
+    font-size: 0.75rem;
+    min-height: 250px;
+  }
+
+  .modal-large {
+    width: 100%;
+    max-width: 100%;
+    margin: 0.5rem;
+  }
+
+  .modal-large .modal-body {
+    padding: 1rem;
+  }
+
+  #import-compose-modal .modal-actions,
+  #create-compose-modal .modal-actions,
+  #generate-compose-modal .modal-actions {
+    padding: 1rem;
+    flex-direction: column;
+  }
+
+  #import-compose-modal .modal-actions button,
+  #create-compose-modal .modal-actions button,
+  #generate-compose-modal .modal-actions button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .compose-project-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .compose-status {
+    align-self: flex-start;
+  }
+
+  .no-data-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .no-data-actions button {
+    width: 100%;
+  }
+}
+    width: 100%;
+  }
+
+  .no-data-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .compose-project-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .compose-project-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .service-image {
+    display: none;
+  }
+}
+
+/* ===== SECTION HEADERS WITH ACTIONS ===== */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.section-header h2 {
+  font-size: 1.125rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.section-header .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.section-header .btn .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.section-header .btn .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Responsive section header */
+@media (max-width: 640px) {
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .section-header .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
