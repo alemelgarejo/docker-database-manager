@@ -4,8 +4,8 @@
  */
 
 import { DatabaseService } from '../services/DatabaseService.js';
+import { hideLoading, showLoading } from '../utils/loading.js';
 import { showNotification } from '../utils/notifications.js';
-import { showLoading, hideLoading } from '../utils/loading.js';
 
 export class ContainerManager {
   constructor() {
@@ -24,7 +24,9 @@ export class ContainerManager {
    * Notify all listeners
    */
   notifyChange() {
-    this.listeners.forEach(callback => callback(this.containers));
+    this.listeners.forEach((callback) => {
+      callback(this.containers);
+    });
   }
 
   /**
@@ -47,7 +49,7 @@ export class ContainerManager {
    */
   async createDatabase(config) {
     showLoading('creatingDatabase');
-    
+
     try {
       const result = await DatabaseService.createDatabase(config);
       showNotification('Database created successfully', 'success');
@@ -67,7 +69,7 @@ export class ContainerManager {
    */
   async startContainer(containerId) {
     showLoading();
-    
+
     try {
       await DatabaseService.startContainer(containerId);
       showNotification('Container started', 'success');
@@ -86,7 +88,7 @@ export class ContainerManager {
    */
   async stopContainer(containerId) {
     showLoading();
-    
+
     try {
       await DatabaseService.stopContainer(containerId);
       showNotification('Container stopped', 'success');
@@ -105,7 +107,7 @@ export class ContainerManager {
    */
   async restartContainer(containerId) {
     showLoading();
-    
+
     try {
       await DatabaseService.restartContainer(containerId);
       showNotification('Container restarted', 'success');
@@ -124,7 +126,7 @@ export class ContainerManager {
    */
   async removeContainer(containerId, removeVolumes = false) {
     showLoading();
-    
+
     try {
       await DatabaseService.removeContainer(containerId, removeVolumes);
       showNotification('Container removed', 'success');
@@ -142,7 +144,7 @@ export class ContainerManager {
    * Get container by ID
    */
   getContainer(containerId) {
-    return this.containers.find(c => c.id === containerId);
+    return this.containers.find((c) => c.id === containerId);
   }
 
   /**
@@ -156,14 +158,16 @@ export class ContainerManager {
    * Get running containers count
    */
   getRunningCount() {
-    return this.containers.filter(c => c.state === 'running').length;
+    return this.containers.filter((c) => c.state === 'running').length;
   }
 
   /**
    * Get stopped containers count
    */
   getStoppedCount() {
-    return this.containers.filter(c => c.state === 'exited' || c.state === 'stopped').length;
+    return this.containers.filter(
+      (c) => c.state === 'exited' || c.state === 'stopped',
+    ).length;
   }
 }
 

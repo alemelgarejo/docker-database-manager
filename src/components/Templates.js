@@ -1,17 +1,14 @@
 // Templates Component
 // UI for managing database templates
 
+import { getIcon } from '../icons.js';
 import {
-  getAllTemplates,
-  predefinedTemplates,
-  getCustomTemplates,
+  applyTemplate,
   deleteCustomTemplate,
   exportTemplate,
+  getAllTemplates,
   importTemplate,
-  applyTemplate,
-  createTemplateFromConfig,
 } from '../templates.js';
-import { getIcon } from '../icons.js';
 
 export class TemplatesManager {
   constructor() {
@@ -47,7 +44,9 @@ export class TemplatesManager {
           </div>
         </div>
 
-        ${predefined.length > 0 ? `
+        ${
+          predefined.length > 0
+            ? `
           <div class="templates-section">
             <h4 class="templates-section-title">
               ${getIcon('star')} Predefined Templates
@@ -56,9 +55,13 @@ export class TemplatesManager {
               ${predefined.map((t) => this.renderTemplateCard(t)).join('')}
             </div>
           </div>
-        ` : ''}
+        `
+            : ''
+        }
 
-        ${custom.length > 0 ? `
+        ${
+          custom.length > 0
+            ? `
           <div class="templates-section">
             <h4 class="templates-section-title">
               ${getIcon('folder')} Custom Templates
@@ -67,11 +70,13 @@ export class TemplatesManager {
               ${custom.map((t) => this.renderTemplateCard(t)).join('')}
             </div>
           </div>
-        ` : `
+        `
+            : `
           <div class="templates-empty">
             <p>No custom templates yet. Create one to get started!</p>
           </div>
-        `}
+        `
+        }
       </div>
     `;
   }
@@ -90,11 +95,15 @@ export class TemplatesManager {
         <p class="template-description">${template.description}</p>
         <div class="template-db-types">
           <span class="template-label">Supports:</span>
-          ${dbTypes.map((type) => `
+          ${dbTypes
+            .map(
+              (type) => `
             <span class="db-type-badge" data-db-type="${type}">
               ${type}
             </span>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
         <div class="template-card-actions">
           <button 
@@ -104,7 +113,9 @@ export class TemplatesManager {
           >
             View
           </button>
-          ${isCustom ? `
+          ${
+            isCustom
+              ? `
             <button 
               class="btn btn-sm btn-ghost" 
               onclick="templatesManager.editTemplate('${template.id}')"
@@ -112,7 +123,9 @@ export class TemplatesManager {
             >
               Edit
             </button>
-          ` : ''}
+          `
+              : ''
+          }
           <button 
             class="btn btn-sm btn-ghost" 
             onclick="templatesManager.exportTemplate('${template.id}')"
@@ -120,7 +133,9 @@ export class TemplatesManager {
           >
             Export
           </button>
-          ${isCustom ? `
+          ${
+            isCustom
+              ? `
             <button 
               class="btn btn-sm btn-ghost btn-danger" 
               onclick="templatesManager.deleteTemplate('${template.id}')"
@@ -128,7 +143,9 @@ export class TemplatesManager {
             >
               Delete
             </button>
-          ` : ''}
+          `
+              : ''
+          }
         </div>
       </div>
     `;
@@ -156,12 +173,16 @@ export class TemplatesManager {
               <p><strong>Memory:</strong> ${config.memory || 'N/A'}</p>
               <p><strong>CPUs:</strong> ${config.cpus || 'N/A'}</p>
               ${config.restartPolicy ? `<p><strong>Restart Policy:</strong> ${config.restartPolicy}</p>` : ''}
-              ${envVars ? `
+              ${
+                envVars
+                  ? `
                 <div class="env-vars">
                   <strong>Environment Variables:</strong>
                   <ul>${envVars}</ul>
                 </div>
-              ` : ''}
+              `
+                  : ''
+              }
             </div>
           </div>
         `;
@@ -176,9 +197,13 @@ export class TemplatesManager {
           <div>
             <h3>${template.name}</h3>
             <p class="template-meta">${template.description}</p>
-            ${template.category === 'custom' && template.createdAt ? `
+            ${
+              template.category === 'custom' && template.createdAt
+                ? `
               <p class="template-meta-date">Created: ${new Date(template.createdAt).toLocaleDateString()}</p>
-            ` : ''}
+            `
+                : ''
+            }
           </div>
         </div>
         <div class="template-configurations">
@@ -198,11 +223,14 @@ export class TemplatesManager {
     if (this.onTemplateSelected) {
       this.onTemplateSelected(templateId);
     }
-    
+
     // Show notification
     if (window.showNotification) {
       const template = getAllTemplates()[templateId];
-      window.showNotification(`Template "${template.name}" selected`, 'success');
+      window.showNotification(
+        `Template "${template.name}" selected`,
+        'success',
+      );
     }
   }
 
@@ -239,7 +267,10 @@ export class TemplatesManager {
       } catch (error) {
         console.error('Error importing template:', error);
         if (window.showNotification) {
-          window.showNotification(`Error importing template: ${error.message}`, 'error');
+          window.showNotification(
+            `Error importing template: ${error.message}`,
+            'error',
+          );
         }
       }
     };

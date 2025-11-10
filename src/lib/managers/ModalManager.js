@@ -38,7 +38,7 @@ export class ModalManager {
    * Close all modals
    */
   static closeAll() {
-    document.querySelectorAll('.modal.active').forEach(modal => {
+    document.querySelectorAll('.modal.active').forEach((modal) => {
       modal.classList.remove('active');
     });
   }
