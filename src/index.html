@@ -91,6 +91,14 @@
             <span class="tab-icon"></span>
             <span>Volumes</span>
           </button>
+          <button
+            class="tab-btn"
+            data-tab="templates"
+            onclick="switchTab('templates')"
+          >
+            <span class="tab-icon"></span>
+            <span>Templates</span>
+          </button>
         </nav>
 
         <!-- Tab: Dashboard -->
@@ -371,6 +379,15 @@
             </div>
           </div>
         </section>
+
+        <!-- Tab: Templates -->
+        <section id="tab-templates" class="tab-content">
+          <div class="templates-section">
+            <div id="templates-tab-content">
+              <!-- Templates will be loaded here -->
+            </div>
+          </div>
+        </section>
       </main>
 
       <!-- Modal: Create Database -->
@@ -400,6 +417,12 @@
               <div class="selected-db-type">
                 <span id="selected-db-icon" class="db-icon-large"></span>
                 <span id="selected-db-name"></span>
+              </div>
+
+              <div class="form-group">
+                <label for="db-template">Template (optional):</label>
+                <div id="db-template-select"></div>
+                <p class="form-help-text">Select a template to apply optimized configurations</p>
               </div>
 
               <div class="form-group">
@@ -440,9 +463,7 @@
 
               <div class="form-group">
                 <label for="db-version">Version:</label>
-                <select id="db-version" required>
-                  <!-- Versions will be loaded dynamically -->
-                </select>
+                <div id="db-version-select"></div>
               </div>
 
               <div class="modal-footer">
@@ -639,6 +660,64 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="closeMonitoringModal()">Close</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal: Template Details -->
+    <div id="template-details-modal" class="modal">
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h2>Template Details</h2>
+          <button class="close-btn" onclick="closeTemplateDetailsModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <!-- Template details will be loaded here -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" onclick="closeTemplateDetailsModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Create/Edit Template -->
+    <div id="create-template-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Create Custom Template</h2>
+          <button class="close-btn" onclick="closeCreateTemplateModal()">×</button>
+        </div>
+        <form id="create-template-form" class="modal-body" onsubmit="handleCreateTemplate(event)">
+          <div class="form-group">
+            <label for="template-name">Template Name:</label>
+            <input type="text" id="template-name" required placeholder="My Custom Template" />
+          </div>
+
+          <div class="form-group">
+            <label for="template-description">Description:</label>
+            <textarea id="template-description" required placeholder="Describe this template..." rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="template-icon">Icon (emoji):</label>
+            <input type="text" id="template-icon" value="⭐" maxlength="2" />
+          </div>
+
+          <div class="form-group">
+            <label>Database Configurations:</label>
+            <p class="form-help-text">Select which databases this template supports and configure them</p>
+            <div id="template-db-configs" class="template-db-configs">
+              <!-- Database configurations will be added here -->
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addTemplateDbConfig()">
+              + Add Database Configuration
+            </button>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" onclick="closeCreateTemplateModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Template</button>
+          </div>
+        </form>
       </div>
     </div>
   </body>

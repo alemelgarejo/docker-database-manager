@@ -2,7 +2,7 @@
 import { getIcon } from '../icons.js';
 
 export class DatabaseCard {
-  static render(container, actions) {
+  static render(container, _actions) {
     const dbIconMap = {
       postgresql: 'postgresql',
       mysql: 'mysql',
@@ -12,7 +12,8 @@ export class DatabaseCard {
     };
     const dbIcon = getIcon(dbIconMap[container.db_type] || 'database');
     const statusClass = container.status === 'running' ? 'running' : 'stopped';
-    const statusIcon = container.status === 'running' ? getIcon('play') : getIcon('pause');
+    const statusIcon =
+      container.status === 'running' ? getIcon('play') : getIcon('pause');
 
     return `
       <div class="db-card">
@@ -39,38 +40,54 @@ export class DatabaseCard {
             <span class="db-info-label">Port</span>
             <span class="db-info-value">${container.port}</span>
           </div>
-          ${container.username ? `
+          ${
+            container.username
+              ? `
           <div class="db-info-item clickable" onclick="copyToClipboard('${container.username}', this)" data-tooltip="Click to copy">
             <span class="db-info-label">Username</span>
             <span class="db-info-value">${container.username}</span>
           </div>
-          ` : ''}
-          ${container.password ? `
+          `
+              : ''
+          }
+          ${
+            container.password
+              ? `
           <div class="db-info-item clickable" onclick="copyToClipboard('${container.password}', this)" data-tooltip="Click to copy">
             <span class="db-info-label">Password</span>
             <span class="db-info-value">••••••••</span>
           </div>
-          ` : ''}
+          `
+              : ''
+          }
         </div>
 
         <div class="db-card-actions">
-          ${container.status === 'running' ? `
+          ${
+            container.status === 'running'
+              ? `
             <button class="action-btn" onclick="stopC('${container.id}')" data-tooltip="Stop database">
               ${getIcon('pause')}
             </button>
             <button class="action-btn" onclick="restartC('${container.id}')" data-tooltip="Restart database">
               ${getIcon('refresh')}
             </button>
-            ${container.db_type !== 'redis' ? `
+            ${
+              container.db_type !== 'redis'
+                ? `
             <button class="action-btn" onclick="showSQL('${container.id}', '${container.db_type}')" data-tooltip="Execute SQL">
               ${getIcon('terminal')}
             </button>
-            ` : ''}
-          ` : `
+            `
+                : ''
+            }
+          `
+              : `
             <button class="action-btn" onclick="startC('${container.id}')" data-tooltip="Start database">
               ${getIcon('play')}
             </button>
-          `}
+          `
+          }
           <button class="action-btn" onclick="showLogs('${container.id}')" data-tooltip="View logs">
             ${getIcon('fileText')}
           </button>

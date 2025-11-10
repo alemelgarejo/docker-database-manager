@@ -91,6 +91,14 @@ pub struct DatabaseConfig {
     pub version: String,
     #[serde(rename = "type")]
     pub db_type: DatabaseType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "restartPolicy")]
+    pub restart_policy: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -163,6 +171,28 @@ async fn check_docker(state: State<'_, AppState>) -> Result<bool, String> {
     match docker.ping().await {
         Ok(_) => Ok(true),
         Err(_) => Ok(false), // NUNCA devolver Err, solo Ok(false)
+    }
+}
+
+// Helper function to parse memory strings like "256m", "2g" to bytes
+fn parse_memory_string(memory_str: &str) -> Result<i64, String> {
+    let memory_str = memory_str.trim().to_lowercase();
+    
+    if memory_str.ends_with("g") || memory_str.ends_with("gb") {
+        let num_str = memory_str.trim_end_matches("gb").trim_end_matches("g");
+        let num: f64 = num_str.parse().map_err(|_| format!("Invalid memory format: {}", memory_str))?;
+        Ok((num * 1024.0 * 1024.0 * 1024.0) as i64)
+    } else if memory_str.ends_with("m") || memory_str.ends_with("mb") {
+        let num_str = memory_str.trim_end_matches("mb").trim_end_matches("m");
+        let num: f64 = num_str.parse().map_err(|_| format!("Invalid memory format: {}", memory_str))?;
+        Ok((num * 1024.0 * 1024.0) as i64)
+    } else if memory_str.ends_with("k") || memory_str.ends_with("kb") {
+        let num_str = memory_str.trim_end_matches("kb").trim_end_matches("k");
+        let num: f64 = num_str.parse().map_err(|_| format!("Invalid memory format: {}", memory_str))?;
+        Ok((num * 1024.0) as i64)
+    } else {
+        // Assume bytes if no suffix
+        memory_str.parse::<i64>().map_err(|_| format!("Invalid memory format: {}", memory_str))
     }
 }
 
@@ -360,128 +390,96 @@ async fn create_database(state: State<'_, AppState>, config: DatabaseConfig) -> 
     }
     
     // Configurar según el tipo de base de datos
-    let container_json = match config.db_type {
+    let mut base_env: Vec<String> = Vec::new();
+    let exposed_port: String;
+    
+    match config.db_type {
         DatabaseType::PostgreSQL => {
-            json!({
-                "Image": image,
-                "Env": [
-                    format!("POSTGRES_USER={}", config.username), 
-                    format!("POSTGRES_PASSWORD={}", config.password), 
-                    format!("POSTGRES_DB={}", config.name)
-                ],
-                "ExposedPorts": {"5432/tcp": {}},
-                "HostConfig": {
-                    "PortBindings": {
-                        "5432/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
-                    }
-                },
-                "Labels": {
-                    "app": "db-manager", 
-                    "database_name": config.name.clone(),
-                    "db_type": config.db_type.to_string(),
-                    "db_icon": config.db_type.get_icon()
-                }
-            })
+            exposed_port = "5432/tcp".to_string();
+            base_env.push(format!("POSTGRES_USER={}", config.username));
+            base_env.push(format!("POSTGRES_PASSWORD={}", config.password));
+            base_env.push(format!("POSTGRES_DB={}", config.name));
         },
         DatabaseType::MySQL => {
-            json!({
-                "Image": image,
-                "Env": [
-                    format!("MYSQL_ROOT_PASSWORD={}", config.password),
-                    format!("MYSQL_DATABASE={}", config.name),
-                    format!("MYSQL_USER={}", config.username),
-                    format!("MYSQL_PASSWORD={}", config.password),
-                ],
-                "ExposedPorts": {"3306/tcp": {}},
-                "HostConfig": {
-                    "PortBindings": {
-                        "3306/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
-                    }
-                },
-                "Labels": {
-                    "app": "db-manager",
-                    "database_name": config.name.clone(),
-                    "db_type": config.db_type.to_string(),
-                    "db_icon": config.db_type.get_icon()
-                }
-            })
+            exposed_port = "3306/tcp".to_string();
+            base_env.push(format!("MYSQL_ROOT_PASSWORD={}", config.password));
+            base_env.push(format!("MYSQL_DATABASE={}", config.name));
+            base_env.push(format!("MYSQL_USER={}", config.username));
+            base_env.push(format!("MYSQL_PASSWORD={}", config.password));
         },
         DatabaseType::MariaDB => {
-            json!({
-                "Image": image,
-                "Env": [
-                    format!("MARIADB_ROOT_PASSWORD={}", config.password),
-                    format!("MARIADB_DATABASE={}", config.name),
-                    format!("MARIADB_USER={}", config.username),
-                    format!("MARIADB_PASSWORD={}", config.password),
-                ],
-                "ExposedPorts": {"3306/tcp": {}},
-                "HostConfig": {
-                    "PortBindings": {
-                        "3306/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
-                    }
-                },
-                "Labels": {
-                    "app": "db-manager",
-                    "database_name": config.name.clone(),
-                    "db_type": config.db_type.to_string(),
-                    "db_icon": config.db_type.get_icon()
-                }
-            })
+            exposed_port = "3306/tcp".to_string();
+            base_env.push(format!("MARIADB_ROOT_PASSWORD={}", config.password));
+            base_env.push(format!("MARIADB_DATABASE={}", config.name));
+            base_env.push(format!("MARIADB_USER={}", config.username));
+            base_env.push(format!("MARIADB_PASSWORD={}", config.password));
         },
         DatabaseType::MongoDB => {
-            let env = if !config.username.is_empty() && !config.password.is_empty() {
-                vec![
-                    format!("MONGO_INITDB_ROOT_USERNAME={}", config.username),
-                    format!("MONGO_INITDB_ROOT_PASSWORD={}", config.password),
-                    format!("MONGO_INITDB_DATABASE={}", config.name),
-                ]
-            } else {
-                vec![]
-            };
-            
-            json!({
-                "Image": image,
-                "Env": env,
-                "ExposedPorts": {"27017/tcp": {}},
-                "HostConfig": {
-                    "PortBindings": {
-                        "27017/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
-                    }
-                },
-                "Labels": {
-                    "app": "db-manager",
-                    "database_name": config.name.clone(),
-                    "db_type": config.db_type.to_string(),
-                    "db_icon": config.db_type.get_icon()
-                }
-            })
+            exposed_port = "27017/tcp".to_string();
+            if !config.username.is_empty() && !config.password.is_empty() {
+                base_env.push(format!("MONGO_INITDB_ROOT_USERNAME={}", config.username));
+                base_env.push(format!("MONGO_INITDB_ROOT_PASSWORD={}", config.password));
+                base_env.push(format!("MONGO_INITDB_DATABASE={}", config.name));
+            }
         },
         DatabaseType::Redis => {
-            let cmd = if !config.password.is_empty() {
-                vec!["redis-server", "--requirepass", &config.password]
-            } else {
-                vec!["redis-server"]
-            };
-            
-            json!({
-                "Image": image,
-                "Cmd": cmd,
-                "ExposedPorts": {"6379/tcp": {}},
-                "HostConfig": {
-                    "PortBindings": {
-                        "6379/tcp": [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
-                    }
-                },
-                "Labels": {
-                    "app": "db-manager",
-                    "database_name": config.name.clone(),
-                    "db_type": config.db_type.to_string(),
-                    "db_icon": config.db_type.get_icon()
-                }
-            })
+            exposed_port = "6379/tcp".to_string();
+            // Redis uses command line args, not env vars for password
         },
-    };
+    }
+    
+    // Add template environment variables
+    if let Some(ref template_env) = config.env {
+        for (key, value) in template_env {
+            base_env.push(format!("{}={}", key, value));
+        }
+    }
+    
+    // Build HostConfig with optional memory and CPU limits
+    let mut host_config = json!({
+        "PortBindings": {
+            &exposed_port: [{"HostPort": config.port.to_string(), "HostIp": "0.0.0.0"}]
+        }
+    });
+    
+    if let Some(ref memory) = config.memory {
+        // Convert memory string (e.g., "256m", "2g") to bytes
+        let memory_bytes = parse_memory_string(memory)?;
+        host_config.as_object_mut().unwrap().insert("Memory".to_string(), json!(memory_bytes));
+    }
+    
+    if let Some(ref cpus) = config.cpus {
+        // Convert CPU string (e.g., "1", "0.5", "2") to NanoCPUs (1 CPU = 1e9 NanoCPUs)
+        if let Ok(cpu_value) = cpus.parse::<f64>() {
+            let nano_cpus = (cpu_value * 1_000_000_000.0) as i64;
+            host_config.as_object_mut().unwrap().insert("NanoCpus".to_string(), json!(nano_cpus));
+        }
+    }
+    
+    if let Some(ref restart_policy) = config.restart_policy {
+        host_config.as_object_mut().unwrap().insert("RestartPolicy".to_string(), json!({
+            "Name": restart_policy
+        }));
+    }
+    
+    // Build container configuration
+    let mut container_json = json!({
+        "Image": image,
+        "Env": base_env,
+        "ExposedPorts": {&exposed_port: {}},
+        "HostConfig": host_config,
+        "Labels": {
+            "app": "db-manager", 
+            "database_name": config.name.clone(),
+            "db_type": config.db_type.to_string(),
+            "db_icon": config.db_type.get_icon()
+        }
+    });
+    
+    // Special case for Redis with password
+    if config.db_type == DatabaseType::Redis && !config.password.is_empty() {
+        container_json.as_object_mut().unwrap().insert("Cmd".to_string(), json!(["redis-server", "--requirepass", &config.password]));
+    }
     
     let container_config: Config<String> = serde_json::from_value(container_json)
         .map_err(|e| format!("Error en configuración: {}", e))?;

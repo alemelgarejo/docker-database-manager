@@ -2,6 +2,9 @@
 import { getIcon } from './icons.js';
 import { SearchFilters } from './components/SearchFilters.js';
 import { loadChart } from './chart-loader.js';
+import { templatesManager } from './components/Templates.js';
+import { getAllTemplates, applyTemplate, saveCustomTemplate } from './templates.js';
+import { CustomSelect } from './components/CustomSelect.js';
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -131,12 +134,79 @@ function showNotification(message, type = 'success') {
   };
 
   const notif = document.createElement('div');
-  notif.style.cssText = `position:fixed;top:80px;right:20px;z-index:9999;background:${colors[type] || colors.success};color:white;padding:1rem 1.5rem;border-radius:8px;box-shadow:0 10px 20px rgba(0,0,0,0.3);max-width:400px;`;
-  notif.textContent = message;
+  notif.style.cssText = `
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 9999;
+    background: ${colors[type] || colors.success};
+    color: white;
+    padding: 1rem 1.5rem;
+    padding-right: 3rem;
+    border-radius: 8px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    max-width: 400px;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    animation: slideIn 0.3s ease;
+  `;
+  
+  const messageSpan = document.createElement('span');
+  messageSpan.textContent = message;
+  messageSpan.style.flex = '1';
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.innerHTML = '×';
+  closeBtn.style.cssText = `
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+  `;
+  
+  closeBtn.onmouseover = () => {
+    closeBtn.style.background = 'rgba(255, 255, 255, 0.2)';
+  };
+  
+  closeBtn.onmouseout = () => {
+    closeBtn.style.background = 'transparent';
+  };
+  
+  closeBtn.onclick = () => {
+    notif.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => notif.remove(), 300);
+  };
+  
+  notif.appendChild(messageSpan);
+  notif.appendChild(closeBtn);
   document.body.appendChild(notif);
 
   const duration = type === 'info' ? 5000 : 3000;
-  setTimeout(() => notif.remove(), duration);
+  const timeoutId = setTimeout(() => {
+    notif.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => notif.remove(), 300);
+  }, duration);
+  
+  // Clear timeout if manually closed
+  closeBtn.onclick = () => {
+    clearTimeout(timeoutId);
+    notif.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => notif.remove(), 300);
+  };
 }
 
 async function checkDocker() {
@@ -478,14 +548,27 @@ async function createDB(e) {
   );
 
   try {
-    const config = {
+    let config = {
       name: document.getElementById('db-name').value,
       username: document.getElementById('db-username').value || '',
       password: document.getElementById('db-password').value || '',
       port: parseInt(document.getElementById('db-port').value, 10),
-      version: document.getElementById('db-version').value,
+      version: versionSelect ? versionSelect.getValue() : '',
       type: selectedDbType,
     };
+
+    // Apply template if selected
+    if (selectedTemplateForDb) {
+      console.log('[TEMPLATE] Applying template:', selectedTemplateForDb);
+      console.log('[TEMPLATE] DB Type:', selectedDbType);
+      console.log('[TEMPLATE] Base config before:', config);
+      
+      const templateConfig = applyTemplate(selectedTemplateForDb, selectedDbType, config);
+      config = { ...config, ...templateConfig };
+      
+      console.log('[TEMPLATE] Applied template configuration:', templateConfig);
+      console.log('[TEMPLATE] Final config:', config);
+    }
 
     console.log('Creating database with config:', config);
 
@@ -500,6 +583,7 @@ async function createDB(e) {
     console.log('Database created:', result);
 
     showNotification('Database created successfully', 'success');
+    selectedTemplateForDb = null; // Reset template selection
     window.closeCreateModal();
     await loadContainers();
     await loadDashboardStats(); // Actualizar dashboard también
@@ -768,6 +852,9 @@ function showStep2() {
   // Inyectar icono en botón back
   updateBackButton();
 
+  // Load template options
+  loadTemplateOptions();
+
   // Configurar valores por defecto
   document.getElementById('db-port').value = dbType.default_port;
   document.getElementById('db-username').value = dbType.default_user;
@@ -800,13 +887,23 @@ function showStep2() {
   }
 
   // Cargar versiones
-  const versionSelect = document.getElementById('db-version');
-  versionSelect.innerHTML = dbType.versions
-    .map(
-      (v, i) =>
-        `<option value="${v}" ${i === 0 ? 'selected' : ''}>${dbType.name} ${v}</option>`,
-    )
-    .join('');
+  const versionItems = dbType.versions.map((v, i) => ({
+    value: v,
+    label: `${dbType.name} ${v}`
+  }));
+
+  // Destroy previous instance if exists
+  if (versionSelect) {
+    versionSelect.destroy();
+  }
+
+  // Create new CustomSelect for versions
+  versionSelect = new CustomSelect('db-version-select', {
+    placeholder: 'Select version',
+    items: versionItems,
+    value: versionItems[0]?.value || '',
+    required: true
+  });
 }
 
 // Seleccionar tipo de base de datos
@@ -1023,6 +1120,8 @@ window.switchTab = (tabName) => {
     loadMigratedDatabases();
   } else if (tabName === 'volumes') {
     loadVolumes();
+  } else if (tabName === 'templates') {
+    loadTemplatesTab();
   }
 };
 
@@ -1761,7 +1860,7 @@ function formatBytes(bytes) {
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / k ** i).toFixed(2)) + ' ' + sizes[i];
 }
 
 async function openMonitoringModal(containerId, containerName) {
@@ -1972,3 +2071,219 @@ function checkAlerts(stats) {
 // Exponer funciones globalmente
 window.openMonitoringModal = openMonitoringModal;
 window.closeMonitoringModal = closeMonitoringModal;
+
+// ===== TEMPLATES =====
+let selectedTemplateForDb = null;
+let templateSelect = null;
+let versionSelect = null;
+
+function loadTemplatesTab() {
+  templatesManager.render('templates-tab-content');
+}
+
+function loadTemplateOptions() {
+  const templates = getAllTemplates();
+  const dbType = selectedDbType;
+
+  // Filter templates that support current db type
+  const availableTemplates = Object.values(templates).filter(
+    (t) => t.configurations[dbType]
+  );
+
+  const items = [
+    { value: '', label: 'Default Configuration' },
+    ...availableTemplates.map(t => ({
+      value: t.id,
+      label: `[${t.icon}] ${t.name} - ${t.description}`
+    }))
+  ];
+
+  // Destroy previous instance if exists
+  if (templateSelect) {
+    templateSelect.destroy();
+  }
+
+  // Create new CustomSelect
+  templateSelect = new CustomSelect('db-template-select', {
+    placeholder: 'Default Configuration',
+    items: items,
+    value: '',
+    onChange: (value) => {
+      selectedTemplateForDb = value || null;
+      if (selectedTemplateForDb) {
+        const template = templates[selectedTemplateForDb];
+        showNotification(`Template "${template.name}" selected. Configuration will be applied on creation.`, 'info');
+      }
+    }
+  });
+}
+
+window.closeTemplateDetailsModal = () => {
+  document.getElementById('template-details-modal')?.classList.remove('active');
+};
+
+window.closeCreateTemplateModal = () => {
+  const modal = document.getElementById('create-template-modal');
+  modal?.classList.remove('active');
+  document.getElementById('create-template-form')?.reset();
+  delete document.getElementById('create-template-form')?.dataset.editingId;
+};
+
+let templateDbConfigCounter = 0;
+
+window.addTemplateDbConfig = () => {
+  const container = document.getElementById('template-db-configs');
+  const configId = `template-config-${templateDbConfigCounter++}`;
+
+  const configHtml = `
+    <div class="template-db-config-item" data-config-id="${configId}">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Database Type:</label>
+          <div class="template-db-type-select" data-config-id="${configId}"></div>
+        </div>
+        <div class="form-group">
+          <label>Memory Limit:</label>
+          <input type="text" class="template-memory" placeholder="256m" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>CPU Limit:</label>
+          <input type="text" class="template-cpus" placeholder="1" required />
+        </div>
+        <div class="form-group">
+          <label>Restart Policy:</label>
+          <div class="template-restart-policy-select" data-config-id="${configId}"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Environment Variables (JSON):</label>
+        <textarea class="template-env-vars" placeholder='{"KEY": "value"}' rows="3"></textarea>
+      </div>
+      <button type="button" class="btn btn-sm btn-danger" onclick="removeTemplateDbConfig('${configId}')">
+        Remove
+      </button>
+    </div>
+  `;
+
+  container.insertAdjacentHTML('beforeend', configHtml);
+  
+  // Initialize CustomSelects for the new config
+  const dbTypeItems = [
+    { value: '', label: 'Select database' },
+    { value: 'postgresql', label: 'PostgreSQL' },
+    { value: 'mysql', label: 'MySQL' },
+    { value: 'mongodb', label: 'MongoDB' },
+    { value: 'redis', label: 'Redis' },
+    { value: 'mariadb', label: 'MariaDB' }
+  ];
+  
+  const restartPolicyItems = [
+    { value: '', label: 'None' },
+    { value: 'always', label: 'Always' },
+    { value: 'unless-stopped', label: 'Unless Stopped' },
+    { value: 'on-failure', label: 'On Failure' }
+  ];
+  
+  new CustomSelect(container.querySelector(`.template-db-type-select[data-config-id="${configId}"]`), {
+    placeholder: 'Select database',
+    items: dbTypeItems,
+    value: '',
+    required: true
+  });
+  
+  new CustomSelect(container.querySelector(`.template-restart-policy-select[data-config-id="${configId}"]`), {
+    placeholder: 'None',
+    items: restartPolicyItems,
+    value: ''
+  });
+};
+
+window.removeTemplateDbConfig = (configId) => {
+  document.querySelector(`[data-config-id="${configId}"]`)?.remove();
+};
+
+window.handleCreateTemplate = async (e) => {
+  e.preventDefault();
+
+  const form = e.target;
+  const name = form.querySelector('#template-name').value;
+  const description = form.querySelector('#template-description').value;
+  const icon = form.querySelector('#template-icon').value;
+  const editingId = form.dataset.editingId;
+
+  // Collect database configurations
+  const configurations = {};
+  const configItems = form.querySelectorAll('.template-db-config-item');
+
+  try {
+    configItems.forEach((item) => {
+      const dbTypeSelectDiv = item.querySelector('.template-db-type-select');
+      const restartPolicySelectDiv = item.querySelector('.template-restart-policy-select');
+      
+      // Get values from CustomSelects by finding the custom-select-value spans
+      const dbTypeValue = dbTypeSelectDiv?.querySelector('.custom-select-value')?.textContent;
+      const dbType = dbTypeValue && dbTypeValue !== 'Select database' ? 
+        dbTypeSelectDiv.querySelector('.custom-select-option.selected')?.getAttribute('data-value') : '';
+      
+      const restartPolicyValue = restartPolicySelectDiv?.querySelector('.custom-select-value')?.textContent;
+      const restartPolicy = restartPolicyValue && restartPolicyValue !== 'None' ? 
+        restartPolicySelectDiv.querySelector('.custom-select-option.selected')?.getAttribute('data-value') : '';
+      
+      const memory = item.querySelector('.template-memory').value;
+      const cpus = item.querySelector('.template-cpus').value;
+      const envVarsText = item.querySelector('.template-env-vars').value;
+
+      if (!dbType) {
+        throw new Error('Please select a database type for all configurations');
+      }
+
+      let envVars = {};
+      if (envVarsText.trim()) {
+        try {
+          envVars = JSON.parse(envVarsText);
+        } catch (e) {
+          throw new Error(`Invalid JSON in environment variables for ${dbType}`);
+        }
+      }
+
+      configurations[dbType] = {
+        memory,
+        cpus,
+        env: envVars,
+      };
+
+      if (restartPolicy) {
+        configurations[dbType].restartPolicy = restartPolicy;
+      }
+    });
+
+    if (Object.keys(configurations).length === 0) {
+      throw new Error('Please add at least one database configuration');
+    }
+
+    const template = {
+      id: editingId,
+      name,
+      description,
+      icon,
+      configurations,
+    };
+
+    saveCustomTemplate(template);
+    closeCreateTemplateModal();
+    loadTemplatesTab();
+    showNotification(
+      editingId ? 'Template updated successfully' : 'Template created successfully',
+      'success'
+    );
+  } catch (error) {
+    showNotification(error.message, 'error');
+  }
+};
+
+// Expose functions globally
+window.loadTemplatesTab = loadTemplatesTab;
+window.loadTemplateOptions = loadTemplateOptions;
+

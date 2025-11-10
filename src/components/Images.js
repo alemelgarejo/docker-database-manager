@@ -7,7 +7,7 @@ export class Images {
     this.invoke = invoke;
     this.searchFilters = new SearchFilters('images');
     this.allImages = [];
-    
+
     // Subscribe to filter changes
     this.searchFilters.onChange(() => {
       this.applyFiltersAndRender();
@@ -18,14 +18,14 @@ export class Images {
     try {
       console.log('Loading images...');
       const images = await this.invoke('list_images');
-      
+
       // Transform images to include name and tags as array
-      this.allImages = images.map(img => ({
+      this.allImages = images.map((img) => ({
         ...img,
         name: img.tags.length > 0 ? img.tags[0] : img.id.substring(0, 12),
-        tags: img.tags
+        tags: img.tags,
       }));
-      
+
       this.render();
     } catch (error) {
       console.error('Error loading images:', error);
@@ -35,15 +35,17 @@ export class Images {
 
   render() {
     const container = document.getElementById('images-list');
-    
+
     if (!container) {
       console.error('Element #images-list not found');
       return;
     }
 
     // Check if search filters container exists
-    const searchContainer = container.parentElement.querySelector('.search-filters-container');
-    
+    const searchContainer = container.parentElement.querySelector(
+      '.search-filters-container',
+    );
+
     if (!searchContainer && this.allImages.length > 0) {
       // Insert search filters before the images list
       const filtersHTML = this.searchFilters.render();
@@ -56,7 +58,7 @@ export class Images {
 
   applyFiltersAndRender() {
     const container = document.getElementById('images-list');
-    
+
     if (!container) return;
 
     if (!this.allImages || this.allImages.length === 0) {
@@ -80,7 +82,9 @@ export class Images {
       return;
     }
 
-    container.innerHTML = filteredImages.map(img => this.renderImageCard(img)).join('');
+    container.innerHTML = filteredImages
+      .map((img) => this.renderImageCard(img))
+      .join('');
   }
 
   renderImageCard(image) {
@@ -137,7 +141,7 @@ export class Images {
       mongodb: 'mongodb',
       redis: 'redis',
       mariadb: 'mariadb',
-      database: 'database'
+      database: 'database',
     };
     return getIcon(iconMap[dbType]);
   }

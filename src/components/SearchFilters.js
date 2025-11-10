@@ -7,19 +7,19 @@ export class SearchFilters {
   constructor(mode = 'databases') {
     // mode can be: 'databases', 'images', 'migration'
     this.mode = mode;
-    
+
     // Initialize filters based on mode
     if (mode === 'images') {
       this.filters = {
         search: '',
         sortBy: 'name',
-        sortOrder: 'asc'
+        sortOrder: 'asc',
       };
     } else if (mode === 'migration') {
       this.filters = {
         search: '',
         sortBy: 'name',
-        sortOrder: 'asc'
+        sortOrder: 'asc',
       };
     } else {
       // Default for databases
@@ -29,10 +29,10 @@ export class SearchFilters {
         status: 'all',
         port: '',
         sortBy: 'name',
-        sortOrder: 'asc'
+        sortOrder: 'asc',
       };
     }
-    
+
     this.listeners = [];
   }
 
@@ -57,13 +57,13 @@ export class SearchFilters {
    */
   updateFilter(key, value) {
     this.filters[key] = value;
-    
+
     // Update reset button badge when filters change
     if (key !== 'sortBy' && key !== 'sortOrder') {
       const count = this.getActiveFiltersCount();
       this.updateResetButton(count);
     }
-    
+
     this.notifyChange();
   }
 
@@ -75,7 +75,7 @@ export class SearchFilters {
       this.filters = {
         search: '',
         sortBy: 'name',
-        sortOrder: 'asc'
+        sortOrder: 'asc',
       };
     } else {
       this.filters = {
@@ -84,7 +84,7 @@ export class SearchFilters {
         status: 'all',
         port: '',
         sortBy: 'name',
-        sortOrder: 'asc'
+        sortOrder: 'asc',
       };
     }
     this.notifyChange();
@@ -99,36 +99,40 @@ export class SearchFilters {
     // Search filter
     if (this.filters.search) {
       const searchLower = this.filters.search.toLowerCase();
-      filtered = filtered.filter(item => {
+      filtered = filtered.filter((item) => {
         if (this.mode === 'images') {
           // For images: search by tags and id
-          return (item.tags?.some(tag => tag.toLowerCase().includes(searchLower))) ||
-                 item.id?.toLowerCase().includes(searchLower);
+          return (
+            item.tags?.some((tag) => tag.toLowerCase().includes(searchLower)) ||
+            item.id?.toLowerCase().includes(searchLower)
+          );
         } else if (this.mode === 'migration') {
           // For migration: search by database name
           return item.name?.toLowerCase().includes(searchLower);
         } else {
           // For databases: search by name and type
-          return item.name.toLowerCase().includes(searchLower) ||
-                 item.db_type.toLowerCase().includes(searchLower);
+          return (
+            item.name.toLowerCase().includes(searchLower) ||
+            item.db_type.toLowerCase().includes(searchLower)
+          );
         }
       });
     }
 
     // Type filter (only for databases)
     if (this.mode === 'databases' && this.filters.type !== 'all') {
-      filtered = filtered.filter(db => db.db_type === this.filters.type);
+      filtered = filtered.filter((db) => db.db_type === this.filters.type);
     }
 
     // Status filter (only for databases)
     if (this.mode === 'databases' && this.filters.status !== 'all') {
-      filtered = filtered.filter(db => db.status === this.filters.status);
+      filtered = filtered.filter((db) => db.status === this.filters.status);
     }
 
     // Port filter (only for databases)
     if (this.mode === 'databases' && this.filters.port) {
-      filtered = filtered.filter(db => 
-        db.port?.toString().includes(this.filters.port)
+      filtered = filtered.filter((db) =>
+        db.port?.toString().includes(this.filters.port),
       );
     }
 
@@ -173,7 +177,12 @@ export class SearchFilters {
               if (!match) return 0;
               const value = parseFloat(match[1]);
               const unit = match[2].toUpperCase();
-              const multipliers = { B: 1, KB: 1024, MB: 1024*1024, GB: 1024*1024*1024 };
+              const multipliers = {
+                B: 1,
+                KB: 1024,
+                MB: 1024 * 1024,
+                GB: 1024 * 1024 * 1024,
+              };
               return value * (multipliers[unit] || 1);
             };
             compareA = parseSize(a.size);
@@ -210,17 +219,20 @@ export class SearchFilters {
    */
   render() {
     const activeFilters = this.getActiveFiltersCount();
-    const placeholderText = this.mode === 'images' ? 'Search by image name or tag...' : 
-                            this.mode === 'migration' ? 'Search by database name...' : 
-                            'Search by name or type...';
-    
+    const placeholderText =
+      this.mode === 'images'
+        ? 'Search by image name or tag...'
+        : this.mode === 'migration'
+          ? 'Search by database name...'
+          : 'Search by name or type...';
+
     // Generate unique IDs based on mode
     const searchId = `search-input-${this.mode}`;
     const clearBtnId = `clear-search-btn-${this.mode}`;
     const sortById = `sort-by-${this.mode}`;
     const sortOrderBtnId = `sort-order-btn-${this.mode}`;
     const resetBtnId = `reset-filters-btn-${this.mode}`;
-    
+
     return `
       <div class="search-filters-container">
         <!-- Search Bar -->
@@ -239,14 +251,18 @@ export class SearchFilters {
             autocapitalize="off"
             spellcheck="false"
           />
-          ${this.filters.search ? `
+          ${
+            this.filters.search
+              ? `
             <button class="clear-search-btn" id="${clearBtnId}" data-tooltip="Clear search">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </button>
-          ` : ''}
+          `
+              : ''
+          }
         </div>
 
         <!-- Filters Row -->
@@ -257,20 +273,26 @@ export class SearchFilters {
           <div class="filter-group">
             <label for="${sortById}">Sort by</label>
             <select id="${sortById}" class="filter-select">
-              ${this.mode === 'images' ? `
+              ${
+                this.mode === 'images'
+                  ? `
                 <option value="name">Name</option>
                 <option value="size">Size</option>
                 <option value="created">Date</option>
-              ` : this.mode === 'migration' ? `
+              `
+                  : this.mode === 'migration'
+                    ? `
                 <option value="name">Name</option>
                 <option value="created">Date</option>
-              ` : `
+              `
+                    : `
                 <option value="name">Name</option>
                 <option value="type">Type</option>
                 <option value="status">Status</option>
                 <option value="port">Port</option>
                 <option value="created">Date</option>
-              `}
+              `
+              }
             </select>
           </div>
 
@@ -298,7 +320,7 @@ export class SearchFilters {
       </div>
     `;
   }
-  
+
   /**
    * Render database-specific filters
    */
@@ -356,7 +378,7 @@ export class SearchFilters {
     const sortById = `sort-by-${this.mode}`;
     const sortOrderBtnId = `sort-order-btn-${this.mode}`;
     const resetBtnId = `reset-filters-btn-${this.mode}`;
-    
+
     // Search input
     const searchInput = document.getElementById(searchId);
     if (searchInput) {
@@ -439,21 +461,21 @@ export class SearchFilters {
         // Reset UI values
         const searchInput = document.getElementById(searchId);
         const sortBy = document.getElementById(sortById);
-        
+
         if (searchInput) searchInput.value = '';
         if (sortBy) sortBy.value = 'name';
-        
+
         // For database mode, reset additional filters
         if (this.mode === 'databases') {
           const filterType = document.getElementById('filter-type');
           const filterStatus = document.getElementById('filter-status');
           const filterPort = document.getElementById('filter-port');
-          
+
           if (filterType) filterType.value = 'all';
           if (filterStatus) filterStatus.value = 'all';
           if (filterPort) filterPort.value = '';
         }
-        
+
         // Update UI elements
         this.updateClearButton('');
         this.updateSortOrderButton('asc');
@@ -483,7 +505,7 @@ export class SearchFilters {
     const clearBtnId = `clear-search-btn-${this.mode}`;
     const searchId = `search-input-${this.mode}`;
     const existingClearBtn = document.getElementById(clearBtnId);
-    
+
     if (searchValue && !existingClearBtn) {
       // Add clear button
       const clearBtn = document.createElement('button');
@@ -520,7 +542,10 @@ export class SearchFilters {
     const sortOrderBtn = document.getElementById(sortOrderBtnId);
     if (!sortOrderBtn) return;
 
-    sortOrderBtn.setAttribute('data-tooltip', `Sort order: ${order === 'asc' ? 'Ascending' : 'Descending'}`);
+    sortOrderBtn.setAttribute(
+      'data-tooltip',
+      `Sort order: ${order === 'asc' ? 'Ascending' : 'Descending'}`,
+    );
     sortOrderBtn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="m7 15 5 5 5-5" opacity="${order === 'desc' ? '1' : '0.3'}"></path>
@@ -563,14 +588,14 @@ export class SearchFilters {
   getActiveFiltersCount() {
     let count = 0;
     if (this.filters.search) count++;
-    
+
     // Database-specific filters
     if (this.mode === 'databases') {
       if (this.filters.type !== 'all') count++;
       if (this.filters.status !== 'all') count++;
       if (this.filters.port) count++;
     }
-    
+
     return count;
   }
 }
