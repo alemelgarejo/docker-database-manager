@@ -2056,6 +2056,10 @@ button span,
 .db-btn-delete svg { stroke: white; }
 .db-btn-delete:hover { background: var(--danger-hover); }
 
+.db-btn-copy-url { background: var(--primary); }
+.db-btn-copy-url svg { stroke: white; }
+.db-btn-copy-url:hover { background: var(--primary-hover); }
+
 /* Confirm Modal */
 .confirm-modal {
   position: fixed;

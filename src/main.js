@@ -264,7 +264,7 @@ async function loadContainers(applyFilters = false) {
     }
 
     list.innerHTML = containers
-      .map((c) => {
+      .map((c, index) => {
         const shortId = c.id.substring(0, 12);
         const dbTypeName =
           c.db_type.charAt(0).toUpperCase() + c.db_type.slice(1);
@@ -277,6 +277,10 @@ async function loadContainers(applyFilters = false) {
           mariadb: 'mariadb',
         };
         const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
+        
+        // Store container data for URL generation
+        window[`containerData_${index}`] = c;
+        
         return `
       <div class="db-card" data-db-type="${c.db_type}">
         <div class="db-card-header">
@@ -308,6 +312,9 @@ async function loadContainers(applyFilters = false) {
         </div>
         
         <div class="db-card-actions">
+          <button class="db-action-btn db-btn-copy-url" onclick="copyConnectionURL(window.containerData_${index})" data-tooltip="Copy connection URL">
+            ${getIcon('link')}
+          </button>
           ${
             c.status === 'running'
               ? `
@@ -638,6 +645,65 @@ async function restartC(id) {
   }
 }
 
+// Función para generar URL de conexión para bases de datos
+function generateConnectionURL(container) {
+  const { db_type, port, username, password, database_name, name } = container;
+  const host = 'localhost';
+  let url = '';
+  
+  // Usar database_name si existe, si no usar name, si no usar valores por defecto
+  const dbName = database_name || name || '';
+  
+  switch(db_type) {
+    case 'postgresql':
+      // postgresql://username:password@host:port/database?schema=public
+      const pgUser = username || 'postgres';
+      const pgPass = password || '';
+      const pgDb = dbName || 'postgres';
+      url = `postgresql://${pgUser}:${pgPass}@${host}:${port}/${pgDb}?schema=public`;
+      break;
+      
+    case 'mysql':
+    case 'mariadb':
+      // mysql://username:password@host:port/database
+      const mysqlUser = username || 'root';
+      const mysqlPass = password || '';
+      const mysqlDb = dbName || '';
+      url = `mysql://${mysqlUser}:${mysqlPass}@${host}:${port}/${mysqlDb}`;
+      break;
+      
+    case 'mongodb':
+      // mongodb://username:password@host:port/database
+      const mongoDb = dbName || '';
+      if (username && password) {
+        url = `mongodb://${username}:${password}@${host}:${port}/${mongoDb}`;
+      } else {
+        url = `mongodb://${host}:${port}/${mongoDb}`;
+      }
+      break;
+      
+    case 'redis':
+      // redis://[:password@]host:port/0
+      if (password) {
+        url = `redis://:${password}@${host}:${port}/0`;
+      } else {
+        url = `redis://${host}:${port}/0`;
+      }
+      break;
+      
+    default:
+      url = `${db_type}://${host}:${port}`;
+  }
+  
+  return url;
+}
+
+// Función para copiar URL de conexión
+function copyConnectionURL(container) {
+  const url = generateConnectionURL(container);
+  copyToClipboard(url, 'Connection URL copied to clipboard!');
+}
+
 // Función para copiar al portapapeles
 function copyToClipboard(text, message = 'Copied!') {
   // Intentar con la API moderna
@@ -951,6 +1017,8 @@ window.removeC = removeC;
 window.showLogs = showLogs;
 window.showSQL = showSQL;
 window.copyToClipboard = copyToClipboard;
+window.copyConnectionURL = copyConnectionURL;
+window.generateConnectionURL = generateConnectionURL;
 window.confirmRemove = confirmRemove;
 window.executeRemove = executeRemove;
 
