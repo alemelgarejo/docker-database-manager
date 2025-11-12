@@ -3272,6 +3272,67 @@ button span,
   justify-content: space-between;
 }
 
+.charts-section {
+  margin-bottom: 1.5rem;
+}
+
+.charts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.charts-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.chart-type-selector {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--surface);
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.chart-type-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.chart-type-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.chart-type-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.chart-type-btn.active:hover {
+  background: var(--primary-hover);
+}
+
+.chart-type-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
 .charts-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -3284,6 +3345,9 @@ button span,
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-wrapper h4 {
@@ -3293,10 +3357,14 @@ button span,
   margin: 0 0 1rem 0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 .chart-wrapper canvas {
   height: 200px !important;
+  width: 100% !important;
+  max-height: 200px;
+  flex-grow: 1;
 }
 
 .monitoring-alerts {

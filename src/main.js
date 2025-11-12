@@ -2018,6 +2018,7 @@ let memoryChart = null;
 let cpuHistory = [];
 let memoryHistory = [];
 const MAX_HISTORY_POINTS = 30; // 30 puntos
+let currentChartType = 'line'; // 'line', 'bar', 'area'
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -2094,6 +2095,11 @@ function initializeCharts() {
   const cpuCtx = document.getElementById('cpu-chart').getContext('2d');
   const memoryCtx = document.getElementById('memory-chart').getContext('2d');
   
+  // Determinar configuración según el tipo de gráfica
+  const isArea = currentChartType === 'area';
+  const isBar = currentChartType === 'bar';
+  const chartType = isArea ? 'line' : currentChartType;
+  
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -2101,7 +2107,7 @@ function initializeCharts() {
     scales: {
       y: {
         beginAtZero: true,
-        max: 100,
+        // Escala dinámica - se ajusta en updateChartsData()
         ticks: {
           callback: (value) => value + '%',
           color: '#94a3b8'
@@ -2111,52 +2117,160 @@ function initializeCharts() {
         }
       },
       x: {
-        ticks: {
-          color: '#94a3b8'
-        },
+        display: false,  // Ocultar eje X completamente (sin labels de hora)
         grid: {
-          color: 'rgba(148, 163, 184, 0.1)'
+          display: false  // Sin grid en X
         }
       }
     },
     plugins: {
       legend: {
         display: false
+      },
+      tooltip: {
+        enabled: true,
+        mode: 'index',
+        intersect: false
+      }
+    },
+    interaction: {
+      mode: 'nearest',
+      axis: 'x',
+      intersect: false
+    },
+    elements: {
+      point: {
+        radius: isBar ? 0 : (currentChartType === 'line' ? 0 : 2),
+        hitRadius: 10,
+        hoverRadius: 4
+      },
+      line: {
+        borderWidth: 2
+      },
+      bar: {
+        borderRadius: 4,
+        borderWidth: 0
       }
     }
   };
   
   cpuChart = new Chart(cpuCtx, {
-    type: 'line',
+    type: chartType,
     data: {
       labels: [],
       datasets: [{
         label: 'CPU %',
-        data: [],
+        data: cpuHistory,
         borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-        fill: true
+        backgroundColor: isArea ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.7)',
+        tension: currentChartType === 'line' || isArea ? 0.4 : 0,
+        fill: isArea || isBar
       }]
     },
     options: chartOptions
   });
   
   memoryChart = new Chart(memoryCtx, {
-    type: 'line',
+    type: chartType,
     data: {
       labels: [],
       datasets: [{
         label: 'Memory %',
-        data: [],
+        data: memoryHistory,
         borderColor: '#8b5cf6',
-        backgroundColor: 'rgba(139, 92, 246, 0.1)',
-        tension: 0.4,
-        fill: true
+        backgroundColor: isArea ? 'rgba(139, 92, 246, 0.3)' : 'rgba(139, 92, 246, 0.7)',
+        tension: currentChartType === 'line' || isArea ? 0.4 : 0,
+        fill: isArea || isBar
       }]
     },
     options: chartOptions
   });
+}
+
+// Función para cambiar el tipo de gráfica
+function changeChartType(newType) {
+  currentChartType = newType;
+  
+  // Actualizar botones activos
+  document.querySelectorAll('.chart-type-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  document.querySelector(`[data-chart-type="${newType}"]`)?.classList.add('active');
+  
+  // Reinicializar gráficas con el nuevo tipo
+  initializeCharts();
+  
+  // Actualizar inmediatamente con los datos actuales
+  if (cpuChart && memoryChart && cpuHistory.length > 0) {
+    updateChartsData();
+  }
+}
+
+// Función helper para actualizar datos de las gráficas
+function updateChartsData() {
+  // SIN LABELS - Quitar las horas que funcionan mal
+  const labels = Array(cpuHistory.length).fill('');
+  
+  // Calcular escala dinámica para CPU
+  const cpuMax = Math.max(...cpuHistory, 1);
+  const cpuMin = Math.min(...cpuHistory, 0);
+  const cpuRange = cpuMax - cpuMin;
+  
+  // Si el rango es pequeño (< 5%), ajustar escala para mejor visualización
+  let cpuScaleMax, cpuScaleMin;
+  if (cpuRange < 5 && cpuMax < 95) {
+    // Zoom in: mostrar solo el rango relevante con padding
+    cpuScaleMin = Math.max(0, Math.floor(cpuMin - 1));
+    cpuScaleMax = Math.min(100, Math.ceil(cpuMax + 2));
+  } else if (cpuMax < 20) {
+    // Si los valores son bajos, usar escala 0-20
+    cpuScaleMin = 0;
+    cpuScaleMax = 20;
+  } else if (cpuMax < 50) {
+    // Valores medios, usar 0-50
+    cpuScaleMin = 0;
+    cpuScaleMax = 50;
+  } else {
+    // Valores altos, usar escala completa 0-100
+    cpuScaleMin = 0;
+    cpuScaleMax = 100;
+  }
+  
+  // Calcular escala dinámica para Memory
+  const memMax = Math.max(...memoryHistory, 1);
+  const memMin = Math.min(...memoryHistory, 0);
+  const memRange = memMax - memMin;
+  
+  let memScaleMax, memScaleMin;
+  if (memRange < 5 && memMax < 95) {
+    memScaleMin = Math.max(0, Math.floor(memMin - 1));
+    memScaleMax = Math.min(100, Math.ceil(memMax + 2));
+  } else if (memMax < 20) {
+    memScaleMin = 0;
+    memScaleMax = 20;
+  } else if (memMax < 50) {
+    memScaleMin = 0;
+    memScaleMax = 50;
+  } else {
+    memScaleMin = 0;
+    memScaleMax = 100;
+  }
+  
+  // Actualizar CPU chart con escala dinámica
+  cpuChart.data.labels = labels;
+  cpuChart.data.datasets[0].data = [...cpuHistory];
+  cpuChart.options.scales.y.min = cpuScaleMin;
+  cpuChart.options.scales.y.max = cpuScaleMax;
+  cpuChart.options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((cpuScaleMax - cpuScaleMin) / 4));
+  cpuChart.update('none');
+  
+  // Actualizar Memory chart con escala dinámica
+  memoryChart.data.labels = labels;
+  memoryChart.data.datasets[0].data = [...memoryHistory];
+  memoryChart.options.scales.y.min = memScaleMin;
+  memoryChart.options.scales.y.max = memScaleMax;
+  memoryChart.options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((memScaleMax - memScaleMin) / 4));
+  memoryChart.update('none');
 }
 
 async function updateMonitoringStats() {
@@ -2188,17 +2302,7 @@ async function updateMonitoringStats() {
     
     // Actualizar gráficas si existen
     if (window.Chart && cpuChart && memoryChart) {
-      const now = new Date();
-      const timeLabel = now.toLocaleTimeString();
-      const labels = Array(cpuHistory.length).fill('').map((_, i) => i === cpuHistory.length - 1 ? timeLabel : '');
-      
-      cpuChart.data.labels = labels;
-      cpuChart.data.datasets[0].data = cpuHistory;
-      cpuChart.update('none'); // Sin animación
-      
-      memoryChart.data.labels = labels;
-      memoryChart.data.datasets[0].data = memoryHistory;
-      memoryChart.update('none'); // Sin animación
+      updateChartsData();
     }
     
     // Verificar alertas
@@ -2235,6 +2339,7 @@ function checkAlerts(stats) {
 // Exponer funciones globalmente
 window.openMonitoringModal = openMonitoringModal;
 window.closeMonitoringModal = closeMonitoringModal;
+window.changeChartType = changeChartType;
 
 // ===== TEMPLATES =====
 let selectedTemplateForDb = null;

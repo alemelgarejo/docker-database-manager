@@ -741,14 +741,30 @@
           </div>
 
           <!-- Charts -->
-          <div class="charts-container">
-            <div class="chart-wrapper">
-              <h4>CPU Usage History</h4>
-              <canvas id="cpu-chart"></canvas>
+          <div class="charts-section">
+            <div class="charts-header">
+              <h3>Resource Usage History</h3>
+              <div class="chart-type-selector">
+                <button class="chart-type-btn active" data-chart-type="line" onclick="changeChartType('line')" data-tooltip="Line Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </button>
+                <button class="chart-type-btn" data-chart-type="area" onclick="changeChartType('area')" data-tooltip="Area Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9l-5 5-3-3-4 4"/><path d="M18 17H6"/></svg>
+                </button>
+                <button class="chart-type-btn" data-chart-type="bar" onclick="changeChartType('bar')" data-tooltip="Bar Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                </button>
+              </div>
             </div>
-            <div class="chart-wrapper">
-              <h4>Memory Usage History</h4>
-              <canvas id="memory-chart"></canvas>
+            <div class="charts-container">
+              <div class="chart-wrapper">
+                <h4>CPU Usage</h4>
+                <canvas id="cpu-chart"></canvas>
+              </div>
+              <div class="chart-wrapper">
+                <h4>Memory Usage</h4>
+                <canvas id="memory-chart"></canvas>
+              </div>
             </div>
           </div>
 

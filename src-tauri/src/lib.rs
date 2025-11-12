@@ -227,10 +227,12 @@ fn get_database_types() -> Result<Vec<DatabaseTypeInfo>, String> {
 #[tauri::command]
 async fn list_containers(state: State<'_, AppState>) -> Result<Vec<ContainerInfo>, String> {
     let docker = state.docker.lock().await;
-    let mut filters = HashMap::new();
-    filters.insert("label".to_string(), vec!["app=db-manager".to_string()]);
     
-    let containers = docker.list_containers(Some(ListContainersOptions::<String> { all: true, filters, ..Default::default() }))
+    // SIN FILTROS - Muestra TODOS los contenedores de Docker
+    let containers = docker.list_containers(Some(ListContainersOptions::<String> { 
+        all: true, 
+        ..Default::default() 
+    }))
         .await.map_err(|e| e.to_string())?;
 
     Ok(containers.iter().map(|c| {
