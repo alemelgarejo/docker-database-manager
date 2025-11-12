@@ -238,7 +238,7 @@ body {
 
 .btn-primary {
   background: var(--primary);
-  color: white;
+  color: white !important;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -246,13 +246,13 @@ body {
 }
 
 .btn-primary svg {
-  stroke: white;
-  fill: none;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-secondary {
   background: var(--secondary);
-  color: white;
+  color: white !important;
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -260,13 +260,13 @@ body {
 }
 
 .btn-secondary svg {
-  stroke: white;
-  fill: none;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-success {
   background: var(--success);
-  color: white;
+  color: white !important;
 }
 
 .btn-success:hover:not(:disabled) {
@@ -274,13 +274,13 @@ body {
 }
 
 .btn-success svg {
-  stroke: white;
-  fill: none;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-danger {
   background: var(--danger);
-  color: white;
+  color: white !important;
 }
 
 .btn-danger:hover:not(:disabled) {
@@ -288,13 +288,13 @@ body {
 }
 
 .btn-danger svg {
-  stroke: white;
-  fill: none;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-warning {
   background: var(--warning);
-  color: white;
+  color: white !important;
 }
 
 .btn-warning:hover:not(:disabled) {
@@ -302,8 +302,8 @@ body {
 }
 
 .btn-warning svg {
-  stroke: white;
-  fill: none;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-sm {
@@ -316,6 +316,37 @@ body {
 .btn-sm .icon svg {
   width: 14px;
   height: 14px;
+}
+
+.btn-sm svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Asegurar que los iconos en btn-sm con colores sean visibles */
+.btn-sm.btn-primary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-secondary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-success svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-danger svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-warning svg {
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-ghost {
@@ -4666,4 +4697,180 @@ button span,
     width: 100%;
     justify-content: center;
   }
+}
+
+/* Migrated database badge */
+.migrated-badge {
+  display: inline-block;
+  background: var(--success);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.local-db-card.migrated {
+  border-left: 3px solid var(--success);
+}
+
+/* ===== FORZAR ICONOS BLANCOS EN TODOS LOS BOTONES DE COLOR - GLOBAL ===== */
+/* Aplica a CUALQUIER contexto sin excepciones */
+
+button.btn-primary svg,
+button.btn-primary .icon svg,
+.btn.btn-primary svg,
+.btn.btn-primary .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-secondary svg,
+button.btn-secondary .icon svg,
+.btn.btn-secondary svg,
+.btn.btn-secondary .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-success svg,
+button.btn-success .icon svg,
+.btn.btn-success svg,
+.btn.btn-success .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-danger svg,
+button.btn-danger .icon svg,
+.btn.btn-danger svg,
+.btn.btn-danger .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-warning svg,
+button.btn-warning .icon svg,
+.btn.btn-warning svg,
+.btn.btn-warning .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* Combinaciones con .btn-sm */
+.btn-sm.btn-primary svg,
+.btn-sm.btn-secondary svg,
+.btn-sm.btn-success svg,
+.btn-sm.btn-danger svg,
+.btn-sm.btn-warning svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* En cualquier contexto (modales, cards, containers, etc) */
+.modal .btn-primary svg,
+.modal .btn-danger svg,
+.modal .btn-warning svg,
+.modal .btn-success svg,
+.modal .btn-secondary svg,
+.confirm-modal .btn-primary svg,
+.confirm-modal .btn-danger svg,
+.confirm-modal .btn-warning svg,
+.confirm-modal .btn-success svg,
+.confirm-modal .btn-secondary svg,
+.db-card .btn-primary svg,
+.db-card .btn-danger svg,
+.db-card .btn-warning svg,
+.db-card .btn-success svg,
+.db-card .btn-secondary svg,
+.local-db-card .btn-primary svg,
+.local-db-card .btn-danger svg,
+.local-db-card .btn-warning svg,
+.local-db-card .btn-success svg,
+.local-db-card .btn-secondary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* Iconos directos (sin wrapper) */
+[class*="btn-primary"] > svg,
+[class*="btn-danger"] > svg,
+[class*="btn-warning"] > svg,
+[class*="btn-success"] > svg,
+[class*="btn-secondary"] > svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* Estilos para confirm-modal-actions */
+.confirm-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+}
+
+/* ===== FORZAR TEXTO Y TODO BLANCO EN BOTONES DE COLOR ===== */
+/* TEXTO, ICONOS, TODO debe ser BLANCO en botones de color */
+
+button.btn-primary,
+.btn.btn-primary,
+button.btn-primary *,
+.btn.btn-primary * {
+  color: white !important;
+}
+
+button.btn-secondary,
+.btn.btn-secondary,
+button.btn-secondary *,
+.btn.btn-secondary * {
+  color: white !important;
+}
+
+button.btn-success,
+.btn.btn-success,
+button.btn-success *,
+.btn.btn-success * {
+  color: white !important;
+}
+
+button.btn-danger,
+.btn.btn-danger,
+button.btn-danger *,
+.btn.btn-danger * {
+  color: white !important;
+}
+
+button.btn-warning,
+.btn.btn-warning,
+button.btn-warning *,
+.btn.btn-warning * {
+  color: white !important;
+}
+
+/* Asegurar que cualquier hijo directo sea blanco */
+.btn-primary > *,
+.btn-secondary > *,
+.btn-success > *,
+.btn-danger > *,
+.btn-warning > * {
+  color: white !important;
+  fill: none !important;
+}
+
+/* Forzar en .btn-sm también */
+.btn-sm.btn-primary,
+.btn-sm.btn-primary *,
+.btn-sm.btn-secondary,
+.btn-sm.btn-secondary *,
+.btn-sm.btn-success,
+.btn-sm.btn-success *,
+.btn-sm.btn-danger,
+.btn-sm.btn-danger *,
+.btn-sm.btn-warning,
+.btn-sm.btn-warning * {
+  color: white !important;
 }
