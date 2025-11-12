@@ -298,6 +298,10 @@
                       value="localhost"
                       required
                       placeholder="localhost"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="off"
+                      spellcheck="false"
                     />
                   </div>
                   <div class="form-group">
@@ -310,6 +314,7 @@
                       min="1024"
                       max="65535"
                       placeholder="5432"
+                      autocomplete="off"
                     />
                   </div>
                 </div>
@@ -322,6 +327,10 @@
                       value="postgres" 
                       required 
                       placeholder="postgres"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="off"
+                      spellcheck="false"
                     />
                   </div>
                   <div class="form-group">
@@ -330,6 +339,10 @@
                       type="password" 
                       id="local-password" 
                       placeholder="Leave empty if no password"
+                      autocomplete="off"
+                      autocorrect="off"
+                      autocapitalize="off"
+                      spellcheck="false"
                     />
                   </div>
                 </div>
@@ -463,12 +476,16 @@
                   id="db-name"
                   required
                   placeholder="my_database"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
                 />
               </div>
 
               <div class="form-group" id="username-group">
                 <label for="db-username">Username:</label>
-                <input type="text" id="db-username" placeholder="user" />
+                <input type="text" id="db-username" placeholder="user" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
               </div>
 
               <div class="form-group" id="password-group">
@@ -477,6 +494,10 @@
                   type="password"
                   id="db-password"
                   placeholder="••••••••"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
                 />
               </div>
 
@@ -488,6 +509,7 @@
                   required
                   placeholder="5544"
                   min="1024"
+                  autocomplete="off"
                   max="65535"
                 />
               </div>
@@ -532,6 +554,41 @@
         </div>
       </div>
 
+      <!-- Modal: Rename Container -->
+      <div id="rename-modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Rename Container</h2>
+            <button class="close-btn" onclick="closeRenameModal()">×</button>
+          </div>
+          <form id="rename-form" onsubmit="executeRename(event)">
+            <div class="modal-body">
+              <p>Rename container: <strong id="rename-current-name"></strong></p>
+              <div class="form-group">
+                <label for="rename-new-name">New Name:</label>
+                <input
+                  type="text"
+                  id="rename-new-name"
+                  required
+                  placeholder="my_database_renamed"
+                  pattern="[a-zA-Z0-9_-]+"
+                  title="Only letters, numbers, hyphens and underscores allowed"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                />
+                <small>Only letters, numbers, hyphens (-) and underscores (_) are allowed</small>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="closeRenameModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary">Rename</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- Modal: SQL Console -->
       <div id="sql-modal" class="modal">
         <div class="modal-content modal-large">
@@ -547,6 +604,10 @@
                   id="sql-query"
                   rows="6"
                   placeholder="SELECT * FROM table;"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
                 ></textarea>
               </div>
               <button type="submit" class="btn btn-primary">Execute</button>
@@ -584,6 +645,9 @@
                 required 
                 placeholder="/path/to/backup/directory"
                 autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
               />
               <small>The backup will be saved as volume-backup.tar.gz in this directory</small>
             </div>
@@ -614,6 +678,9 @@
                 required 
                 placeholder="/path/to/volume-backup.tar.gz"
                 autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
               />
               <small>⚠️ This will replace all data in the volume</small>
             </div>
@@ -674,14 +741,30 @@
           </div>
 
           <!-- Charts -->
-          <div class="charts-container">
-            <div class="chart-wrapper">
-              <h4>CPU Usage History</h4>
-              <canvas id="cpu-chart"></canvas>
+          <div class="charts-section">
+            <div class="charts-header">
+              <h3>Resource Usage History</h3>
+              <div class="chart-type-selector">
+                <button class="chart-type-btn active" data-chart-type="line" onclick="changeChartType('line')" data-tooltip="Line Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </button>
+                <button class="chart-type-btn" data-chart-type="area" onclick="changeChartType('area')" data-tooltip="Area Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9l-5 5-3-3-4 4"/><path d="M18 17H6"/></svg>
+                </button>
+                <button class="chart-type-btn" data-chart-type="bar" onclick="changeChartType('bar')" data-tooltip="Bar Chart">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                </button>
+              </div>
             </div>
-            <div class="chart-wrapper">
-              <h4>Memory Usage History</h4>
-              <canvas id="memory-chart"></canvas>
+            <div class="charts-container">
+              <div class="chart-wrapper">
+                <h4>CPU Usage</h4>
+                <canvas id="cpu-chart"></canvas>
+              </div>
+              <div class="chart-wrapper">
+                <h4>Memory Usage</h4>
+                <canvas id="memory-chart"></canvas>
+              </div>
             </div>
           </div>
 
@@ -720,17 +803,17 @@
         <form id="create-template-form" class="modal-body" onsubmit="handleCreateTemplate(event)">
           <div class="form-group">
             <label for="template-name">Template Name:</label>
-            <input type="text" id="template-name" required placeholder="My Custom Template" />
+            <input type="text" id="template-name" required placeholder="My Custom Template" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           </div>
 
           <div class="form-group">
             <label for="template-description">Description:</label>
-            <textarea id="template-description" required placeholder="Describe this template..." rows="3"></textarea>
+            <textarea id="template-description" required placeholder="Describe this template..." rows="3" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
           </div>
 
           <div class="form-group">
             <label for="template-icon">Icon (emoji):</label>
-            <input type="text" id="template-icon" value="⭐" maxlength="2" />
+            <input type="text" id="template-icon" value="⭐" maxlength="2" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           </div>
 
           <div class="form-group">
@@ -767,6 +850,10 @@
               id="image-name"
               placeholder="e.g., postgres:15, nginx:latest, redis:7"
               required
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
             />
             <small>Enter the full image name with tag (e.g., postgres:15)</small>
           </div>

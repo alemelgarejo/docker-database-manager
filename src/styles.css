@@ -238,47 +238,72 @@ body {
 
 .btn-primary {
   background: var(--primary);
-  color: white;
+  color: white !important;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-hover);
 }
 
+.btn-primary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
 .btn-secondary {
   background: var(--secondary);
-  color: white;
+  color: white !important;
 }
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--secondary-hover);
 }
 
+.btn-secondary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
 .btn-success {
   background: var(--success);
-  color: white;
+  color: white !important;
 }
 
 .btn-success:hover:not(:disabled) {
   background: var(--success-hover);
 }
 
+.btn-success svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
 .btn-danger {
   background: var(--danger);
-  color: white;
+  color: white !important;
 }
 
 .btn-danger:hover:not(:disabled) {
   background: var(--danger-hover);
 }
 
+.btn-danger svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
 .btn-warning {
   background: var(--warning);
-  color: white;
+  color: white !important;
 }
 
 .btn-warning:hover:not(:disabled) {
   background: var(--warning-hover);
+}
+
+.btn-warning svg {
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-sm {
@@ -293,6 +318,37 @@ body {
   height: 14px;
 }
 
+.btn-sm svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Asegurar que los iconos en btn-sm con colores sean visibles */
+.btn-sm.btn-primary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-secondary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-success svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-danger svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-sm.btn-warning svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
 .btn-ghost {
   background: transparent;
   border: 1px solid var(--border);
@@ -302,6 +358,70 @@ body {
 .btn-ghost:hover:not(:disabled) {
   background: var(--surface-hover);
   color: var(--text-primary);
+}
+
+.btn-ghost.btn-danger {
+  color: var(--danger);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-ghost.btn-danger svg {
+  stroke: var(--danger) !important;
+  fill: none !important;
+}
+
+.btn-ghost.btn-primary {
+  color: var(--primary);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-primary:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-ghost.btn-primary svg {
+  stroke: var(--primary) !important;
+  fill: none !important;
+}
+
+.btn-ghost.btn-success {
+  color: var(--success);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-success:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.btn-ghost.btn-success svg {
+  stroke: var(--success) !important;
+  fill: none !important;
+}
+
+.btn-ghost.btn-warning {
+  color: var(--warning);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-warning:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.btn-ghost.btn-warning svg {
+  stroke: var(--warning) !important;
+  fill: none !important;
 }
 
 /* ===== TABS ===== */
@@ -1844,7 +1964,8 @@ button span,
 }
 
 .btn-icon.btn-success svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-warning {
@@ -1854,7 +1975,8 @@ button span,
 }
 
 .btn-icon.btn-warning svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-danger {
@@ -1864,7 +1986,8 @@ button span,
 }
 
 .btn-icon.btn-danger svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-secondary {
@@ -1874,7 +1997,19 @@ button span,
 }
 
 .btn-icon.btn-secondary svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-icon.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.btn-icon.btn-primary svg {
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-ghost:hover {
@@ -2032,33 +2167,42 @@ button span,
 }
 
 .db-btn-start { background: var(--success); }
-.db-btn-start svg { stroke: white; }
+.db-btn-start svg { stroke: white !important; fill: none !important; }
 .db-btn-start:hover { background: var(--success-hover); }
 
 .db-btn-stop { background: var(--warning); }
-.db-btn-stop svg { stroke: white; }
+.db-btn-stop svg { stroke: white !important; fill: none !important; }
 .db-btn-stop:hover { background: var(--warning-hover); }
 
 .db-btn-restart { background: var(--secondary); }
-.db-btn-restart svg { stroke: white; }
+.db-btn-restart svg { stroke: white !important; fill: none !important; }
 .db-btn-restart:hover { background: var(--secondary-hover); }
 
 .db-btn-logs { background: var(--surface-hover); }
-.db-btn-logs svg { stroke: var(--text-primary); }
+.db-btn-logs svg { stroke: var(--text-primary) !important; fill: none !important; }
 .db-btn-logs:hover { background: var(--primary); }
-.db-btn-logs:hover svg { stroke: white; }
+.db-btn-logs:hover svg { stroke: white !important; }
 
 .db-btn-sql { background: var(--success); }
-.db-btn-sql svg { stroke: white; }
+.db-btn-sql svg { stroke: white !important; fill: none !important; }
 .db-btn-sql:hover { background: var(--success-hover); }
 
 .db-btn-delete { background: var(--danger); }
-.db-btn-delete svg { stroke: white; }
+.db-btn-delete svg { stroke: white !important; fill: none !important; }
 .db-btn-delete:hover { background: var(--danger-hover); }
 
+.db-btn-edit { background: var(--surface-hover); }
+.db-btn-edit svg { stroke: var(--text-primary) !important; fill: none !important; }
+.db-btn-edit:hover { background: var(--primary); }
+.db-btn-edit:hover svg { stroke: white !important; }
+
 .db-btn-copy-url { background: var(--primary); }
-.db-btn-copy-url svg { stroke: white; }
+.db-btn-copy-url svg { stroke: white !important; fill: none !important; }
 .db-btn-copy-url:hover { background: var(--primary-hover); }
+
+.db-btn-monitor { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); }
+.db-btn-monitor svg { stroke: white !important; fill: none !important; }
+.db-btn-monitor:hover { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); }
 
 /* Confirm Modal */
 .confirm-modal {
@@ -3159,6 +3303,67 @@ button span,
   justify-content: space-between;
 }
 
+.charts-section {
+  margin-bottom: 1.5rem;
+}
+
+.charts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.charts-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.chart-type-selector {
+  display: flex;
+  gap: 0.5rem;
+  background: var(--surface);
+  padding: 0.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.chart-type-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.chart-type-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.chart-type-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.chart-type-btn.active:hover {
+  background: var(--primary-hover);
+}
+
+.chart-type-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+}
+
 .charts-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -3171,6 +3376,9 @@ button span,
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-wrapper h4 {
@@ -3180,10 +3388,14 @@ button span,
   margin: 0 0 1rem 0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 .chart-wrapper canvas {
   height: 200px !important;
+  width: 100% !important;
+  max-height: 200px;
+  flex-grow: 1;
 }
 
 .monitoring-alerts {
@@ -4485,4 +4697,180 @@ button span,
     width: 100%;
     justify-content: center;
   }
+}
+
+/* Migrated database badge */
+.migrated-badge {
+  display: inline-block;
+  background: var(--success);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.local-db-card.migrated {
+  border-left: 3px solid var(--success);
+}
+
+/* ===== FORZAR ICONOS BLANCOS EN TODOS LOS BOTONES DE COLOR - GLOBAL ===== */
+/* Aplica a CUALQUIER contexto sin excepciones */
+
+button.btn-primary svg,
+button.btn-primary .icon svg,
+.btn.btn-primary svg,
+.btn.btn-primary .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-secondary svg,
+button.btn-secondary .icon svg,
+.btn.btn-secondary svg,
+.btn.btn-secondary .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-success svg,
+button.btn-success .icon svg,
+.btn.btn-success svg,
+.btn.btn-success .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-danger svg,
+button.btn-danger .icon svg,
+.btn.btn-danger svg,
+.btn.btn-danger .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+button.btn-warning svg,
+button.btn-warning .icon svg,
+.btn.btn-warning svg,
+.btn.btn-warning .icon svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* Combinaciones con .btn-sm */
+.btn-sm.btn-primary svg,
+.btn-sm.btn-secondary svg,
+.btn-sm.btn-success svg,
+.btn-sm.btn-danger svg,
+.btn-sm.btn-warning svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* En cualquier contexto (modales, cards, containers, etc) */
+.modal .btn-primary svg,
+.modal .btn-danger svg,
+.modal .btn-warning svg,
+.modal .btn-success svg,
+.modal .btn-secondary svg,
+.confirm-modal .btn-primary svg,
+.confirm-modal .btn-danger svg,
+.confirm-modal .btn-warning svg,
+.confirm-modal .btn-success svg,
+.confirm-modal .btn-secondary svg,
+.db-card .btn-primary svg,
+.db-card .btn-danger svg,
+.db-card .btn-warning svg,
+.db-card .btn-success svg,
+.db-card .btn-secondary svg,
+.local-db-card .btn-primary svg,
+.local-db-card .btn-danger svg,
+.local-db-card .btn-warning svg,
+.local-db-card .btn-success svg,
+.local-db-card .btn-secondary svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* Iconos directos (sin wrapper) */
+[class*="btn-primary"] > svg,
+[class*="btn-danger"] > svg,
+[class*="btn-warning"] > svg,
+[class*="btn-success"] > svg,
+[class*="btn-secondary"] > svg {
+  stroke: white !important;
+  fill: none !important;
+}
+
+/* Estilos para confirm-modal-actions */
+.confirm-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+}
+
+/* ===== FORZAR TEXTO Y TODO BLANCO EN BOTONES DE COLOR ===== */
+/* TEXTO, ICONOS, TODO debe ser BLANCO en botones de color */
+
+button.btn-primary,
+.btn.btn-primary,
+button.btn-primary *,
+.btn.btn-primary * {
+  color: white !important;
+}
+
+button.btn-secondary,
+.btn.btn-secondary,
+button.btn-secondary *,
+.btn.btn-secondary * {
+  color: white !important;
+}
+
+button.btn-success,
+.btn.btn-success,
+button.btn-success *,
+.btn.btn-success * {
+  color: white !important;
+}
+
+button.btn-danger,
+.btn.btn-danger,
+button.btn-danger *,
+.btn.btn-danger * {
+  color: white !important;
+}
+
+button.btn-warning,
+.btn.btn-warning,
+button.btn-warning *,
+.btn.btn-warning * {
+  color: white !important;
+}
+
+/* Asegurar que cualquier hijo directo sea blanco */
+.btn-primary > *,
+.btn-secondary > *,
+.btn-success > *,
+.btn-danger > *,
+.btn-warning > * {
+  color: white !important;
+  fill: none !important;
+}
+
+/* Forzar en .btn-sm también */
+.btn-sm.btn-primary,
+.btn-sm.btn-primary *,
+.btn-sm.btn-secondary,
+.btn-sm.btn-secondary *,
+.btn-sm.btn-success,
+.btn-sm.btn-success *,
+.btn-sm.btn-danger,
+.btn-sm.btn-danger *,
+.btn-sm.btn-warning,
+.btn-sm.btn-warning * {
+  color: white !important;
 }

@@ -1293,6 +1293,7 @@ window.switchTab = (tabName) => {
 let localPostgresConfig = null;
 let allLocalDatabases = [];
 let allMigratedDatabases = [];
+let allMigratedDatabases = [];
 
 async function checkLocalPostgres() {
   const statusDot = document.getElementById('status-dot');
