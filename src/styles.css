@@ -245,6 +245,11 @@ body {
   background: var(--primary-hover);
 }
 
+.btn-primary svg {
+  stroke: white;
+  fill: none;
+}
+
 .btn-secondary {
   background: var(--secondary);
   color: white;
@@ -252,6 +257,11 @@ body {
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--secondary-hover);
+}
+
+.btn-secondary svg {
+  stroke: white;
+  fill: none;
 }
 
 .btn-success {
@@ -263,6 +273,11 @@ body {
   background: var(--success-hover);
 }
 
+.btn-success svg {
+  stroke: white;
+  fill: none;
+}
+
 .btn-danger {
   background: var(--danger);
   color: white;
@@ -272,6 +287,11 @@ body {
   background: var(--danger-hover);
 }
 
+.btn-danger svg {
+  stroke: white;
+  fill: none;
+}
+
 .btn-warning {
   background: var(--warning);
   color: white;
@@ -279,6 +299,11 @@ body {
 
 .btn-warning:hover:not(:disabled) {
   background: var(--warning-hover);
+}
+
+.btn-warning svg {
+  stroke: white;
+  fill: none;
 }
 
 .btn-sm {
@@ -302,6 +327,70 @@ body {
 .btn-ghost:hover:not(:disabled) {
   background: var(--surface-hover);
   color: var(--text-primary);
+}
+
+.btn-ghost.btn-danger {
+  color: var(--danger);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-ghost.btn-danger svg {
+  stroke: var(--danger) !important;
+  fill: none !important;
+}
+
+.btn-ghost.btn-primary {
+  color: var(--primary);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-primary:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-ghost.btn-primary svg {
+  stroke: var(--primary) !important;
+  fill: none !important;
+}
+
+.btn-ghost.btn-success {
+  color: var(--success);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-success:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.btn-ghost.btn-success svg {
+  stroke: var(--success) !important;
+  fill: none !important;
+}
+
+.btn-ghost.btn-warning {
+  color: var(--warning);
+  border-color: var(--border);
+}
+
+.btn-ghost.btn-warning:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.btn-ghost.btn-warning svg {
+  stroke: var(--warning) !important;
+  fill: none !important;
 }
 
 /* ===== TABS ===== */
@@ -1844,7 +1933,8 @@ button span,
 }
 
 .btn-icon.btn-success svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-warning {
@@ -1854,7 +1944,8 @@ button span,
 }
 
 .btn-icon.btn-warning svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-danger {
@@ -1864,7 +1955,8 @@ button span,
 }
 
 .btn-icon.btn-danger svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-secondary {
@@ -1874,7 +1966,19 @@ button span,
 }
 
 .btn-icon.btn-secondary svg {
-  stroke: white;
+  stroke: white !important;
+  fill: none !important;
+}
+
+.btn-icon.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.btn-icon.btn-primary svg {
+  stroke: white !important;
+  fill: none !important;
 }
 
 .btn-icon.btn-ghost:hover {
@@ -2032,33 +2136,37 @@ button span,
 }
 
 .db-btn-start { background: var(--success); }
-.db-btn-start svg { stroke: white; }
+.db-btn-start svg { stroke: white !important; fill: none !important; }
 .db-btn-start:hover { background: var(--success-hover); }
 
 .db-btn-stop { background: var(--warning); }
-.db-btn-stop svg { stroke: white; }
+.db-btn-stop svg { stroke: white !important; fill: none !important; }
 .db-btn-stop:hover { background: var(--warning-hover); }
 
 .db-btn-restart { background: var(--secondary); }
-.db-btn-restart svg { stroke: white; }
+.db-btn-restart svg { stroke: white !important; fill: none !important; }
 .db-btn-restart:hover { background: var(--secondary-hover); }
 
 .db-btn-logs { background: var(--surface-hover); }
-.db-btn-logs svg { stroke: var(--text-primary); }
+.db-btn-logs svg { stroke: var(--text-primary) !important; fill: none !important; }
 .db-btn-logs:hover { background: var(--primary); }
-.db-btn-logs:hover svg { stroke: white; }
+.db-btn-logs:hover svg { stroke: white !important; }
 
 .db-btn-sql { background: var(--success); }
-.db-btn-sql svg { stroke: white; }
+.db-btn-sql svg { stroke: white !important; fill: none !important; }
 .db-btn-sql:hover { background: var(--success-hover); }
 
 .db-btn-delete { background: var(--danger); }
-.db-btn-delete svg { stroke: white; }
+.db-btn-delete svg { stroke: white !important; fill: none !important; }
 .db-btn-delete:hover { background: var(--danger-hover); }
 
 .db-btn-copy-url { background: var(--primary); }
-.db-btn-copy-url svg { stroke: white; }
+.db-btn-copy-url svg { stroke: white !important; fill: none !important; }
 .db-btn-copy-url:hover { background: var(--primary-hover); }
+
+.db-btn-monitor { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); }
+.db-btn-monitor svg { stroke: white !important; fill: none !important; }
+.db-btn-monitor:hover { background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); }
 
 /* Confirm Modal */
 .confirm-modal {
