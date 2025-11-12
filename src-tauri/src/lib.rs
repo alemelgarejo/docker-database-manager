@@ -521,6 +521,30 @@ async fn restart_container(state: State<'_, AppState>, container_id: String) -> 
 }
 
 #[tauri::command]
+async fn rename_container(state: State<'_, AppState>, container_id: String, new_name: String) -> Result<String, String> {
+    let docker = state.docker.lock().await;
+    
+    // Validar que el nuevo nombre no esté vacío
+    if new_name.trim().is_empty() {
+        return Err("Container name cannot be empty".to_string());
+    }
+    
+    // Validar formato del nombre (solo letras, números, guiones y guiones bajos)
+    if !new_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err("Container name can only contain letters, numbers, hyphens and underscores".to_string());
+    }
+    
+    // Docker API: POST /containers/{id}/rename?name={newname}
+    use bollard::container::RenameContainerOptions;
+    
+    docker.rename_container(&container_id, RenameContainerOptions {
+        name: new_name.clone()
+    }).await.map_err(|e| format!("Error renaming container: {}", e))?;
+    
+    Ok(format!("Container renamed to '{}'", new_name))
+}
+
+#[tauri::command]
 async fn remove_container(state: State<'_, AppState>, container_id: String, remove_volumes: bool) -> Result<String, String> {
     let docker = state.docker.lock().await;
     
@@ -652,7 +676,8 @@ pub fn run() {
             create_database, 
             start_container, 
             stop_container, 
-            restart_container, 
+            restart_container,
+            rename_container,
             remove_container, 
             get_logs, 
             exec_sql, 

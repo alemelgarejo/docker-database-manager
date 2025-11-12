@@ -2160,6 +2160,11 @@ button span,
 .db-btn-delete svg { stroke: white !important; fill: none !important; }
 .db-btn-delete:hover { background: var(--danger-hover); }
 
+.db-btn-edit { background: var(--surface-hover); }
+.db-btn-edit svg { stroke: var(--text-primary) !important; fill: none !important; }
+.db-btn-edit:hover { background: var(--primary); }
+.db-btn-edit:hover svg { stroke: white !important; }
+
 .db-btn-copy-url { background: var(--primary); }
 .db-btn-copy-url svg { stroke: white !important; fill: none !important; }
 .db-btn-copy-url:hover { background: var(--primary-hover); }

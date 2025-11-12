@@ -353,7 +353,16 @@ async function loadContainers(applyFilters = false) {
             </button>
           `
           }
-          <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name}')" data-tooltip="Delete container">
+          <button 
+            class="db-action-btn db-btn-edit" 
+            data-container-id="${c.id}" 
+            data-container-name="${c.name.replace(/"/g, '&quot;')}" 
+            onclick="openRenameModalFromButton(this)" 
+            data-tooltip="Rename container"
+          >
+            ${getIcon('edit')}
+          </button>
+          <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name.replace(/'/g, "\\'")}' )" data-tooltip="Delete container">
             ${getIcon('trash')}
           </button>
         </div>
@@ -828,6 +837,83 @@ async function showLogs(id) {
   }
 }
 
+// Variables globales para el modal de rename
+let currentRenameContainerId = null;
+
+function openRenameModalFromButton(button) {
+  const containerId = button.getAttribute('data-container-id');
+  const currentName = button.getAttribute('data-container-name');
+  console.log('[openRenameModalFromButton]', { containerId, currentName });
+  openRenameModal(containerId, currentName);
+}
+
+function openRenameModal(containerId, currentName) {
+  console.log('[openRenameModal]', { containerId, currentName });
+  currentRenameContainerId = containerId;
+  document.getElementById('rename-current-name').textContent = currentName;
+  document.getElementById('rename-new-name').value = currentName;
+  document.getElementById('rename-modal').classList.add('active');
+  // Focus on input after modal animation
+  setTimeout(() => {
+    document.getElementById('rename-new-name').select();
+  }, 100);
+}
+
+function closeRenameModal() {
+  document.getElementById('rename-modal').classList.remove('active');
+  document.getElementById('rename-form').reset();
+  currentRenameContainerId = null;
+}
+
+async function executeRename(e) {
+  e.preventDefault();
+  const newName = document.getElementById('rename-new-name').value.trim();
+  
+  console.log('[executeRename] Starting...', {
+    newName,
+    currentRenameContainerId,
+  });
+  
+  if (!newName) {
+    showNotification('Container name cannot be empty', 'error');
+    return;
+  }
+
+  if (!currentRenameContainerId) {
+    console.error('[executeRename] currentRenameContainerId is null or undefined!');
+    showNotification('No container selected', 'error');
+    return;
+  }
+
+  // ¡GUARDAR EL ID EN UNA VARIABLE LOCAL ANTES DE CERRAR EL MODAL!
+  const containerIdToRename = currentRenameContainerId;
+  
+  closeRenameModal();
+  showLoading('Renaming container...');
+
+  try {
+    console.log('[executeRename] Calling invoke with:', {
+      containerId: containerIdToRename,
+      newName: newName,
+    });
+    
+    const result = await invoke('rename_container', {
+      containerId: containerIdToRename,
+      newName: newName
+    });
+    
+    console.log('[executeRename] Success:', result);
+    showNotification(result, 'success');
+    await loadContainers();
+    await loadDashboardStats();
+  } catch (e) {
+    console.error('[executeRename] Error:', e);
+    showNotification('Error renaming container: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
 let currentSQL = null;
 function showSQL(id, db) {
   currentSQL = { id, db };
@@ -1023,6 +1109,10 @@ window.copyConnectionURL = copyConnectionURL;
 window.generateConnectionURL = generateConnectionURL;
 window.confirmRemove = confirmRemove;
 window.executeRemove = executeRemove;
+window.openRenameModal = openRenameModal;
+window.openRenameModalFromButton = openRenameModalFromButton;
+window.closeRenameModal = closeRenameModal;
+window.executeRename = executeRename;
 
 // Función para cambiar idioma
 window.changeLanguage = (lang) => {
