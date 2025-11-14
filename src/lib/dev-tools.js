@@ -9,6 +9,7 @@ import { cache } from './utils/cache.js';
 import { polling } from './utils/polling.js';
 import { getStoredLogs, exportLogs, clearStoredLogs, configureLogger } from './utils/logger.js';
 import { appState } from './state/AppState.js';
+import { runAppStateTests } from './state/AppState.test.js';
 
 /**
  * Setup global dev tools
@@ -56,6 +57,9 @@ export function setupDevTools() {
       enablePersistence: (keys) => appState.enablePersistence(keys),
       disablePersistence: () => appState.disablePersistence(),
     },
+    test: {
+      runAppStateTests: () => runAppStateTests(),
+    },
   };
   
   console.log('%c🛠️ Dev Tools Ready', 'color: #10b981; font-size: 14px; font-weight: bold');
@@ -68,4 +72,5 @@ export function setupDevTools() {
   console.log('  __DEV__.state.undo()');
   console.log('  __DEV__.state.redo()');
   console.log('  __DEV__.state.enableHistory()');
+  console.log('  __DEV__.test.runAppStateTests()');
 }

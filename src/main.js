@@ -12,11 +12,15 @@ import { VirtualScroll } from './lib/utils/virtualScroll.js';
 import { createLogger } from './lib/utils/logger.js';
 import { setupDevTools } from './lib/dev-tools.js';
 import { appState } from './lib/state/AppState.js';
+import { TabManager } from './lib/managers/TabManager.js';
 
 // Create loggers for different contexts
 const logger = createLogger('Main');
 const tauriLogger = createLogger('Tauri');
 const updateLogger = createLogger('Updates');
+
+// Create tab manager instance
+const tabManager = new TabManager();
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -221,18 +225,18 @@ function showNotification(message, type = 'success') {
 async function checkDocker() {
   try {
     const isConnected = await invoke('check_docker');
+    logger.info(`[checkDocker] Docker status: ${isConnected ? 'Connected' : 'Disconnected'}`);
+    
     if (isConnected) {
       document.getElementById('docker-status').textContent = 'Docker Connected';
-      hideDockerError();
       return true;
     } else {
       document.getElementById('docker-status').textContent = 'Docker Disconnected';
-      showDockerError();
       return false;
     }
-  } catch (_e) {
+  } catch (error) {
+    logger.error('[checkDocker] Error checking Docker:', error);
     document.getElementById('docker-status').textContent = 'Docker Disconnected';
-    showDockerError();
     return false;
   }
 }
@@ -440,6 +444,136 @@ function renderContainerCard(c, index) {
       </div>
     </div>
   `;
+}
+
+/**
+ * Render containers from appState without fetching
+ * Used by observers to update UI when state changes
+ */
+function renderContainers() {
+  const allContainers = appState.getData('allContainers');
+  if (!allContainers || allContainers.length === 0) return;
+  
+  const list = document.getElementById('containers-list');
+  const noData = document.getElementById('no-containers');
+  const resultsCount = document.getElementById('results-count');
+  const searchFilters = appState.getComponent('searchFilters');
+
+  // Apply filters if component exists
+  let containers = allContainers;
+  if (searchFilters) {
+    containers = searchFilters.applyFilters(allContainers);
+  }
+
+  if (!containers.length) {
+    list.innerHTML = '';
+    noData.style.display = 'block';
+    if (resultsCount) {
+      resultsCount.textContent = allContainers.length > 0 ? 'No results found' : '';
+    }
+    return;
+  }
+
+  noData.style.display = 'none';
+  
+  // Update results count
+  if (resultsCount) {
+    if (searchFilters && searchFilters.getActiveFiltersCount() > 0) {
+      resultsCount.innerHTML = `
+        Showing <strong>${containers.length}</strong> of <strong>${allContainers.length}</strong> databases
+        <span class="filter-badge">${searchFilters.getActiveFiltersCount()} active filters</span>
+      `;
+    } else {
+      resultsCount.textContent = `Showing ${containers.length} databases`;
+    }
+  }
+
+  // Simple render without virtual scroll (observer updates should be lightweight)
+  list.innerHTML = containers.map((c, i) => renderContainerCard(c, i)).join('');
+}
+
+/**
+ * Render images from appState without fetching
+ * Used by observers to update UI when state changes
+ */
+function renderImages() {
+  const allImages = appState.getData('allImages');
+  if (!allImages || allImages.length === 0) return;
+  
+  const list = document.getElementById('images-list');
+  const noData = document.getElementById('no-images');
+  const resultsCount = document.getElementById('results-count-images');
+  const imagesSearchFilters = appState.getComponent('imagesSearchFilters');
+
+  // Apply filters if component exists
+  let images = allImages;
+  if (imagesSearchFilters) {
+    images = imagesSearchFilters.applyFilters(allImages);
+  }
+
+  if (!images.length) {
+    list.innerHTML = '';
+    noData.style.display = 'block';
+    if (resultsCount) {
+      resultsCount.textContent = allImages.length > 0 ? 'No results found' : '';
+    }
+    return;
+  }
+
+  noData.style.display = 'none';
+  
+  // Update results count
+  if (resultsCount) {
+    if (imagesSearchFilters && imagesSearchFilters.getActiveFiltersCount() > 0) {
+      resultsCount.innerHTML = `
+        Showing <strong>${images.length}</strong> of <strong>${allImages.length}</strong> images
+        <span class="filter-badge">${imagesSearchFilters.getActiveFiltersCount()} active filters</span>
+      `;
+    } else {
+      resultsCount.textContent = `Showing ${images.length} images`;
+    }
+  }
+
+  // Render images
+  list.innerHTML = images.map((img) => {
+    const mainTag = img.tags[0] || 'unknown';
+    const shortId = img.id.substring(7, 19); // Quitar sha256:
+
+    return `
+      <div class="image-card">
+        <div class="image-header">
+          <div class="image-icon">${getIcon('package')}</div>
+          <div class="image-info">
+            <h3 class="image-title">${mainTag}</h3>
+            <span class="image-meta">${img.size} • ${img.created}</span>
+          </div>
+        </div>
+        
+        <div class="image-data">
+          <div class="image-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
+            <span class="image-data-label">ID</span>
+            <span class="image-data-value">${shortId}</span>
+          </div>
+          ${
+            img.tags.length > 1
+              ? `
+          <div class="image-data-item">
+            <span class="image-data-label">Tags</span>
+            <span class="image-data-value">${img.tags.length} tags</span>
+          </div>
+          `
+              : ''
+          }
+        </div>
+        
+        <div class="image-actions">
+          <button class="btn btn-danger btn-sm" onclick="confirmRemoveImage('${img.id}', '${mainTag}')" data-tooltip="Delete image">
+            ${getIcon('trash')}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 /**
@@ -1473,8 +1607,13 @@ if (window.location.hostname === 'localhost' || window.location.hostname === 'ta
       resumeAll: () => polling.resumeAll(),
     },
     state: {
-      containers: () => allContainers,
-      images: () => allImages,
+      containers: () => appState.getData('allContainers') || [],
+      images: () => appState.getData('allImages') || [],
+      volumes: () => appState.getData('allVolumes') || [],
+      networks: () => appState.getData('allNetworks') || [],
+      get: (key) => appState.getData(key),
+      set: (key, value) => appState.setData(key, value),
+      getAll: () => appState.getAllData(),
     }
   };
   
@@ -1531,6 +1670,21 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
+    // Enable AppState features
+    logger.info('[AppState] Enabling persistence and history...');
+    
+    // Enable state persistence for specific keys
+    appState.enablePersistence([
+      'ui.currentChartType',
+      'ui.selectedDbType',
+      // Don't persist runtime data like containers/images
+    ]);
+    
+    // Enable state history (undo/redo)
+    appState.enableHistory();
+    
+    logger.info('[AppState] Features enabled', appState.getStats());
+
     // Cargar tipos de bases de datos
     await loadDatabaseTypes();
 
@@ -1549,35 +1703,36 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('create-form').onsubmit = createDB;
     document.getElementById('sql-form').onsubmit = execSQL;
 
-    // Verificar Docker y cargar contenedores (NO BLOQUEAR LA UI)
-    checkDocker()
-      .then(async (connected) => {
-        if (connected) {
-          console.log('✅ Docker connected, loading data...');
-          // Cargar dashboard primero ya que es la tab activa por defecto
-          await loadDashboardStats();
-          // Luego cargar containers para la tab databases
-          await loadContainers(false, true);
-          document.getElementById('docker-status').textContent =
-            'Docker connected';
-          console.log('✅ Initial data loaded');
-          
-          // Setup intelligent polling
-          setupPolling();
-        } else {
-          console.warn('⚠️ Docker not connected on startup');
-          document.getElementById('docker-status').textContent =
-            '❌ Docker not connected';
-          // Show error overlay but don't block the UI
-          showDockerError();
-        }
-      })
-      .catch((error) => {
-        console.error('❌ Error checking Docker:', error);
-        document.getElementById('docker-status').textContent =
-          '❌ Docker not connected';
-        showDockerError();
-      });
+    // Initialize tabs first (before checking Docker)
+    initializeTabs();
+    logger.info('[App] Tabs initialized');
+    
+    // Setup state observers
+    setupStateObservers();
+    logger.info('[App] State observers configured');
+    
+    // Verificar Docker y cargar contenedores
+    const dockerConnected = await checkDocker();
+    
+    if (dockerConnected) {
+      logger.info('[App] Docker connected, loading initial data...');
+      hideDockerError(); // Ensure overlay is hidden
+      
+      // Cargar dashboard primero ya que es la tab activa por defecto
+      await loadDashboardStats();
+      
+      // Luego cargar containers para la tab databases
+      await loadContainers(false, true);
+      
+      logger.info('[App] Initial data loaded');
+      
+      // Setup intelligent polling
+      setupPolling();
+      logger.info('[App] Polling system started');
+    } else {
+      logger.warn('[App] Docker not connected on startup');
+      showDockerError(); // Show overlay only if really not connected
+    }
 
     // Verificar actualizaciones después de 3 segundos
     setTimeout(() => checkForUpdates(true), 3000);
@@ -1605,39 +1760,157 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ===== TAB SYSTEM =====
-window.switchTab = (tabName) => {
+// ===== TAB SYSTEM WITH LAZY LOADING =====
+
+/**
+ * Initialize all tabs with their lazy loaders
+ */
+function initializeTabs() {
+  logger.info('[initializeTabs] Registering tab loaders...');
+  
+  // Dashboard - load immediately (first view)
+  tabManager.registerTab('dashboard', async () => {
+    logger.info('[Tab] Loading dashboard...');
+    await loadDashboardStats();
+  }, true);
+
+  // Databases - lazy load
+  tabManager.registerTab('databases', async () => {
+    logger.info('[Tab] Loading databases...');
+    await loadContainers();
+  });
+
+  // Images - lazy load
+  tabManager.registerTab('images', async () => {
+    logger.info('[Tab] Loading images...');
+    await loadImages();
+  });
+
+  // Migration - lazy load
+  tabManager.registerTab('migration', async () => {
+    logger.info('[Tab] Loading migration...');
+    await checkLocalPostgres();
+    await loadMigratedDatabases();
+  });
+
+  // Volumes - lazy load
+  tabManager.registerTab('volumes', async () => {
+    logger.info('[Tab] Loading volumes...');
+    await loadVolumes();
+  });
+
+  // Compose - lazy load
+  tabManager.registerTab('compose', async () => {
+    logger.info('[Tab] Loading compose...');
+    loadComposeTab();
+  });
+
+  // Templates - lazy load
+  tabManager.registerTab('templates', async () => {
+    logger.info('[Tab] Loading templates...');
+    loadTemplatesTab();
+  });
+  
+  logger.info('[initializeTabs] Tabs registered. Loaded:', tabManager.getLoadedCount());
+}
+
+/**
+ * Setup state observers to react to data changes
+ */
+function setupStateObservers() {
+  logger.info('[State] Setting up observers...');
+  
+  // Observer for containers data changes
+  appState.subscribe('data.allContainers', (containers) => {
+    logger.debug('[Observer] Containers changed', { count: containers?.length || 0 });
+    
+    // Auto-update databases tab if it's active and visible
+    const currentTab = tabManager.getCurrentTab();
+    if (currentTab === 'databases' && document.getElementById('tab-databases')?.style.display !== 'none') {
+      renderContainers();
+    }
+    
+    // Update dashboard stats if visible
+    if (currentTab === 'dashboard' || document.getElementById('tab-dashboard')?.style.display !== 'none') {
+      updateDashboardContainersCount(containers?.length || 0);
+    }
+  });
+  
+  // Observer for images data changes
+  appState.subscribe('data.allImages', (images) => {
+    logger.debug('[Observer] Images changed', { count: images?.length || 0 });
+    
+    // Auto-update images tab if it's active
+    const currentTab = tabManager.getCurrentTab();
+    if (currentTab === 'images' && document.getElementById('tab-images')?.style.display !== 'none') {
+      renderImages();
+    }
+  });
+  
+  // Observer for UI changes
+  appState.subscribe('ui.currentChartType', (chartType) => {
+    logger.debug('[Observer] Chart type changed', { chartType });
+  });
+  
+  // Observer for tab changes (via TabManager)
+  tabManager.onChange((tabName) => {
+    logger.debug('[Observer] Tab changed', { tab: tabName });
+    appState.setUI('activeTab', tabName);
+  });
+  
+  logger.info('[State] Observers configured');
+}
+
+/**
+ * Update dashboard containers count
+ * @param {number} count - Number of containers
+ */
+function updateDashboardContainersCount(count) {
+  const elem = document.getElementById('total-containers');
+  if (elem) {
+    elem.textContent = count;
+  }
+}
+
+/**
+ * Switch between tabs with lazy loading
+ * Delegates to TabManager for loading and state management
+ */
+window.switchTab = async (tabName) => {
+  logger.info(`[switchTab] Switching to: ${tabName}`);
+  
   // Update tab buttons
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.remove('active');
   });
-  document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+  
+  const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+  if (tabButton) {
+    tabButton.classList.add('active');
+  }
 
-  // Update tab content
+  // Update tab content visibility
   document.querySelectorAll('.tab-content').forEach((content) => {
     content.classList.remove('active');
+    content.style.display = 'none';
   });
-  document.getElementById(`tab-${tabName}`)?.classList.add('active');
+  
+  const tabContent = document.getElementById(`tab-${tabName}`);
+  if (tabContent) {
+    tabContent.classList.add('active');
+    tabContent.style.display = 'block';
+  }
 
   // Notify polling manager about tab change
   polling.setActiveTab(tabName);
 
-  // Load data based on active tab - RECARGAR SIEMPRE CON TRADUCCIONES
-  if (tabName === 'dashboard') {
-    loadDashboardStats();
-  } else if (tabName === 'databases') {
-    loadContainers();
-  } else if (tabName === 'images') {
-    loadImages();
-  } else if (tabName === 'migration') {
-    checkLocalPostgres();
-    loadMigratedDatabases();
-  } else if (tabName === 'volumes') {
-    loadVolumes();
-  } else if (tabName === 'compose') {
-    loadComposeTab();
-  } else if (tabName === 'templates') {
-    loadTemplatesTab();
+  // Use TabManager to handle loading
+  try {
+    await tabManager.switchTab(tabName);
+    logger.info(`[switchTab] Tab ${tabName} loaded successfully`);
+  } catch (error) {
+    logger.error(`[switchTab] Error loading tab ${tabName}:`, error);
+    showNotification(`Error loading ${tabName}: ${error}`, 'error');
   }
 };
 

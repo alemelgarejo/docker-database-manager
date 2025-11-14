@@ -53,7 +53,11 @@
 - 💤 **Visibility Detection** - Pausa cuando la ventana está oculta
 - 📦 **Virtual Scrolling** - Maneja 100+ contenedores sin lag
 - 🔍 **Structured Logging** - Sistema de logs profesional con niveles y contexto
-- 🏗️ **Centralized State** - Un solo source of truth para todo el estado
+- 🏗️ **Centralized State** - AppState con observers, persistence y history
+- 📋 **State Persistence** - Guarda preferencias en localStorage
+- ⏪ **Undo/Redo** - Historial de estados con soporte para deshacer/rehacer
+- 🔔 **Reactive Observers** - UI se actualiza automáticamente cuando cambia el estado
+- 🧪 **Unit Tests** - Suite de tests para AppState y componentes críticos
 
 ---
 
@@ -432,6 +436,93 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 **Alejandro Melgarejo**
 - GitHub: [@alemelgarejo](https://github.com/alemelgarejo)
+
+---
+
+## 🛠️ Development Tools
+
+Docker Database Manager incluye herramientas de desarrollo poderosas accesibles en la consola del navegador:
+
+```javascript
+// Acceder a las herramientas de desarrollo
+window.__DEV__
+
+// Cache Management
+__DEV__.cache.stats()           // Ver estadísticas del cache
+__DEV__.cache.clear()           // Limpiar todo el cache
+__DEV__.cache.invalidate(key)   // Invalidar una clave específica
+
+// Polling Management
+__DEV__.polling.stats()         // Ver estadísticas de polling
+__DEV__.polling.pauseAll()      // Pausar todos los polls
+__DEV__.polling.resumeAll()     // Reanudar todos los polls
+
+// Logger
+__DEV__.logger.getLogs()        // Obtener todos los logs almacenados
+__DEV__.logger.exportLogs()     // Exportar logs como JSON
+__DEV__.logger.clearLogs()      // Limpiar logs
+
+// State Management
+__DEV__.state.get()             // Ver snapshot completo del estado
+__DEV__.state.stats()           // Estadísticas del estado
+__DEV__.state.undo()            // Deshacer último cambio
+__DEV__.state.redo()            // Rehacer cambio
+__DEV__.state.enableHistory()   // Activar historial de estados
+__DEV__.state.enablePersistence(['ui.theme']) // Persistir keys específicas
+
+// Run Tests
+__DEV__.test.runAppStateTests() // Ejecutar tests unitarios de AppState
+```
+
+### Logging Estructurado
+
+El sistema de logging proporciona:
+
+- **Niveles**: DEBUG, INFO, WARN, ERROR
+- **Contexto**: Cada módulo tiene su propio logger
+- **Timestamps**: Precisión de milisegundos
+- **Colores**: Output visual en consola
+- **Almacenamiento**: Logs guardados en memoria para debugging
+
+```javascript
+import { createLogger } from './lib/utils/logger.js';
+
+const logger = createLogger('MyModule');
+logger.info('Application started');
+logger.warn('Cache miss', { key: 'containers' });
+logger.error('Failed to load', { error: e.message });
+```
+
+### State Management
+
+AppState proporciona:
+
+- **Centralización**: Un solo source of truth
+- **Observers**: Reactividad automática
+- **Persistence**: LocalStorage automático
+- **History**: Undo/Redo integrado
+- **Type Safety**: Validación de tipos
+
+```javascript
+import { appState } from './lib/state/AppState.js';
+
+// Set data
+appState.setData('allContainers', containers);
+
+// Subscribe to changes
+const unsubscribe = appState.subscribe('data.allContainers', (newContainers) => {
+  console.log('Containers updated:', newContainers.length);
+});
+
+// Enable features
+appState.enableHistory();
+appState.enablePersistence(['ui.theme', 'ui.language']);
+
+// Undo/Redo
+appState.setData('count', 5, true); // saveHistory = true
+appState.undo(); // Revert to previous state
+appState.redo(); // Restore
+```
 
 ---
 
