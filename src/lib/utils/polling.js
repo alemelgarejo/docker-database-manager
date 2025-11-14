@@ -3,6 +3,10 @@
  * Handles periodic updates with smart optimizations
  */
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('Polling');
+
 export class PollingManager {
   constructor() {
     this.intervals = new Map();
@@ -12,7 +16,7 @@ export class PollingManager {
     // Listen to visibility changes
     this.setupVisibilityListener();
     
-    console.log('[Polling] Manager initialized');
+    logger.info('Polling Manager initialized');
   }
 
   /**
@@ -23,10 +27,10 @@ export class PollingManager {
       this.isVisible = !document.hidden;
       
       if (this.isVisible) {
-        console.log('[Polling] Page visible - resuming all intervals');
+        logger.info('Page visible - resuming all intervals');
         this.resumeAll();
       } else {
-        console.log('[Polling] Page hidden - pausing all intervals');
+        logger.info('Page hidden - pausing all intervals');
         this.pauseAll();
       }
     });
@@ -74,7 +78,11 @@ export class PollingManager {
     this.startInterval(task);
     this.intervals.set(key, task);
 
-    console.log(`[Polling] Registered: ${key} (${interval}ms, tab: ${tab || 'all'})`);
+    logger.debug(`Registered: ${key}`, { 
+      interval: `${interval}ms`, 
+      tab: tab || 'all',
+      immediate
+    });
   }
 
   /**
@@ -96,35 +104,39 @@ export class PollingManager {
   async executeTask(task) {
     // Check if should run
     if (task.paused) {
-      console.log(`[Polling] Skipped (paused): ${task.key}`);
+      logger.debug(`Skipped (paused): ${task.key}`);
       return;
     }
 
     if (task.onlyWhenVisible && !this.isVisible) {
-      console.log(`[Polling] Skipped (not visible): ${task.key}`);
+      logger.debug(`Skipped (not visible): ${task.key}`);
       return;
     }
 
     if (task.tab && task.tab !== this.activeTab) {
-      console.log(`[Polling] Skipped (wrong tab): ${task.key} (need: ${task.tab}, active: ${this.activeTab})`);
+      logger.debug(`Skipped (wrong tab): ${task.key}`, { 
+        needed: task.tab, 
+        active: this.activeTab 
+      });
       return;
     }
 
     // Execute task
-    const startTime = Date.now();
+    const endTimer = logger.time(`Execute ${task.key}`);
     try {
-      console.log(`[Polling] Running: ${task.key}`);
+      logger.debug(`Running: ${task.key}`);
       await task.callback();
       task.lastRun = Date.now();
       task.runCount++;
-      console.log(`[Polling] Completed: ${task.key} (${Date.now() - startTime}ms)`);
+      endTimer();
     } catch (error) {
       task.errors++;
-      console.error(`[Polling] Error in ${task.key}:`, error);
+      endTimer();
+      logger.error(`Error in ${task.key}`, { error: error.message });
       
       // If too many errors, pause the task
       if (task.errors >= 5) {
-        console.error(`[Polling] Too many errors, pausing: ${task.key}`);
+        logger.error(`Too many errors, pausing: ${task.key}`, { errors: task.errors });
         this.pause(task.key);
       }
     }
@@ -141,7 +153,7 @@ export class PollingManager {
         clearInterval(task.intervalId);
       }
       this.intervals.delete(key);
-      console.log(`[Polling] Unregistered: ${key}`);
+      logger.debug(`Unregistered: ${key}`);
       return true;
     }
     return false;
@@ -155,7 +167,7 @@ export class PollingManager {
     const task = this.intervals.get(key);
     if (task) {
       task.paused = true;
-      console.log(`[Polling] Paused: ${key}`);
+      logger.debug(`Paused: ${key}`);
       return true;
     }
     return false;
@@ -170,7 +182,7 @@ export class PollingManager {
     if (task) {
       task.paused = false;
       task.errors = 0; // Reset error count
-      console.log(`[Polling] Resumed: ${key}`);
+      logger.debug(`Resumed: ${key}`);
       return true;
     }
     return false;
@@ -183,7 +195,7 @@ export class PollingManager {
     for (const task of this.intervals.values()) {
       task.paused = true;
     }
-    console.log('[Polling] All tasks paused');
+    logger.info('All tasks paused');
   }
 
   /**
@@ -194,7 +206,7 @@ export class PollingManager {
       task.paused = false;
       task.errors = 0;
     }
-    console.log('[Polling] All tasks resumed');
+    logger.info('All tasks resumed');
   }
 
   /**
@@ -204,7 +216,7 @@ export class PollingManager {
   setActiveTab(tabName) {
     const oldTab = this.activeTab;
     this.activeTab = tabName;
-    console.log(`[Polling] Active tab changed: ${oldTab} -> ${tabName}`);
+    logger.info('Active tab changed', { from: oldTab, to: tabName });
     
     // Trigger tasks for the new active tab
     for (const task of this.intervals.values()) {
@@ -257,8 +269,9 @@ export class PollingManager {
         clearInterval(task.intervalId);
       }
     }
+    const count = this.intervals.size;
     this.intervals.clear();
-    console.log('[Polling] All tasks cleared');
+    logger.info('All tasks cleared', { tasksCleared: count });
   }
 }
 

@@ -3,10 +3,15 @@
  * Manages intelligent caching to reduce unnecessary API calls
  */
 
+import { createLogger } from './logger.js';
+
+const logger = createLogger('Cache');
+
 export class CacheManager {
   constructor() {
     this.cache = new Map();
     this.defaultTTL = 30000; // 30 seconds default
+    logger.info('Cache Manager initialized', { defaultTTL: this.defaultTTL });
   }
 
   /**
@@ -21,23 +26,29 @@ export class CacheManager {
     const now = Date.now();
 
     // Return cached data if valid
-    if (cached && cached.timestamp && (now - cached.timestamp < ttl)) {
-      console.log(`[Cache] HIT: ${key} (age: ${now - cached.timestamp}ms)`);
+    if (cached?.timestamp && (now - cached.timestamp < ttl)) {
+      const age = now - cached.timestamp;
+      logger.debug(`HIT: ${key}`, { age: `${age}ms` });
       return cached.data;
     }
 
     // Cache miss or expired - fetch fresh data
-    console.log(`[Cache] MISS: ${key} - fetching...`);
+    logger.debug(`MISS: ${key} - fetching...`);
+    const endTimer = logger.time(`Fetch ${key}`);
+    
     try {
       const data = await fetcher();
       this.set(key, data, ttl);
+      endTimer();
       return data;
     } catch (error) {
+      endTimer();
       // If fetch fails but we have stale cache, return it
-      if (cached && cached.data) {
-        console.warn(`[Cache] Fetch failed, returning stale data for ${key}`);
+      if (cached?.data) {
+        logger.warn(`Fetch failed for ${key}, returning stale data`, { error: error.message });
         return cached.data;
       }
+      logger.error(`Fetch failed for ${key}`, { error: error.message });
       throw error;
     }
   }
@@ -54,7 +65,7 @@ export class CacheManager {
       timestamp: Date.now(),
       ttl,
     });
-    console.log(`[Cache] SET: ${key} (TTL: ${ttl}ms)`);
+    logger.debug(`SET: ${key}`, { ttl: `${ttl}ms` });
   }
 
   /**
@@ -63,7 +74,7 @@ export class CacheManager {
    */
   invalidate(key) {
     if (this.cache.has(key)) {
-      console.log(`[Cache] INVALIDATE: ${key}`);
+      logger.debug(`INVALIDATE: ${key}`);
       this.cache.delete(key);
       return true;
     }
@@ -88,7 +99,7 @@ export class CacheManager {
     }
     
     if (count > 0) {
-      console.log(`[Cache] INVALIDATE PATTERN: ${pattern} (${count} keys)`);
+      logger.info(`INVALIDATE PATTERN: ${pattern}`, { keysCleared: count });
     }
     return count;
   }
@@ -99,7 +110,7 @@ export class CacheManager {
   clear() {
     const size = this.cache.size;
     this.cache.clear();
-    console.log(`[Cache] CLEAR ALL (${size} keys cleared)`);
+    logger.info('CLEAR ALL', { keysCleared: size });
   }
 
   /**
@@ -161,7 +172,7 @@ export class CacheManager {
     }
 
     if (cleaned > 0) {
-      console.log(`[Cache] CLEANUP: ${cleaned} expired entries removed`);
+      logger.debug('CLEANUP', { expiredEntriesRemoved: cleaned });
     }
     return cleaned;
   }

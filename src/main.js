@@ -9,6 +9,13 @@ import { DockerCompose } from './components/DockerCompose.js';
 import { cache } from './lib/utils/cache.js';
 import { polling } from './lib/utils/polling.js';
 import { VirtualScroll } from './lib/utils/virtualScroll.js';
+import { createLogger } from './lib/utils/logger.js';
+import { setupDevTools } from './lib/dev-tools.js';
+
+// Create loggers for different contexts
+const logger = createLogger('Main');
+const tauriLogger = createLogger('Tauri');
+const updateLogger = createLogger('Updates');
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -22,7 +29,7 @@ function getTauriAPI() {
         const relaunch = window.__TAURI__?.plugin?.process?.relaunch;
 
         if (invoke) {
-          console.log('[Tauri] API loaded successfully');
+          tauriLogger.info('API loaded successfully');
           resolve({ invoke, check, ask, relaunch });
         } else {
           setTimeout(checkTauri, 50);
@@ -49,8 +56,8 @@ let allImages = []; // Cache de todas las imágenes
 // Virtual scrolling instance for containers
 let containersVirtualScroll = null;
 
-console.log('[main.js] v3 loaded - improved Docker connection');
-console.log('[main.js] Waiting for Tauri to be available...');
+logger.info('Application starting...');
+logger.debug('Waiting for Tauri API...');
 
 // Función para verificar actualizaciones
 async function checkForUpdates(silent = true) {
