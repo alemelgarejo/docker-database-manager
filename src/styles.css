@@ -4987,3 +4987,22 @@ button.btn-warning *,
   }
 }
 
+/* ===== VIRTUAL SCROLLING ===== */
+.virtual-scroll-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Ensure consistent grid layout for virtual scrolled items */
+#containers-list.virtual-scrolling {
+  display: flex;
+  flex-direction: column;
+}
+
+#containers-list.virtual-scrolling .virtual-scroll-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.25rem;
+}
+

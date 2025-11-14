@@ -6,6 +6,9 @@ import { templatesManager } from './components/Templates.js';
 import { getAllTemplates, applyTemplate, saveCustomTemplate } from './templates.js';
 import { CustomSelect } from './components/CustomSelect.js';
 import { DockerCompose } from './components/DockerCompose.js';
+import { cache } from './lib/utils/cache.js';
+import { polling } from './lib/utils/polling.js';
+import { VirtualScroll } from './lib/utils/virtualScroll.js';
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -42,6 +45,9 @@ let migrationSearchFilters = null;
 let composeManager = null;
 let allContainers = []; // Cache de todos los contenedores
 let allImages = []; // Cache de todas las imágenes
+
+// Virtual scrolling instance for containers
+let containersVirtualScroll = null;
 
 console.log('[main.js] v3 loaded - improved Docker connection');
 console.log('[main.js] Waiting for Tauri to be available...');
@@ -309,9 +315,17 @@ async function retryDockerConnection() {
       showNotification('Docker connected successfully!', 'success');
       hideDockerError();
       
+      // Clear all cache to get fresh data
+      cache.clear();
+      
       // Reload data
       await loadDashboardStats();
-      await loadContainers();
+      await loadContainers(false, true);
+      
+      // Re-setup polling if it was cleared
+      if (polling.getStats().total === 0) {
+        setupPolling();
+      }
     } else {
       showNotification('Docker is still not available. Please start Docker Desktop.', 'warning');
     }
@@ -322,11 +336,133 @@ async function retryDockerConnection() {
   }
 }
 
-async function loadContainers(applyFilters = false) {
+/**
+ * Render a single container card
+ * @param {Object} c - Container object
+ * @param {number} index - Container index
+ * @returns {string} HTML string for container card
+ */
+function renderContainerCard(c, index) {
+  const shortId = c.id.substring(0, 12);
+  const dbTypeName = c.db_type.charAt(0).toUpperCase() + c.db_type.slice(1);
+
+  const dbIconMap = {
+    postgresql: 'postgresql',
+    mysql: 'mysql',
+    mongodb: 'mongodb',
+    redis: 'redis',
+    mariadb: 'mariadb',
+  };
+  const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
+  
+  // Store container data for URL generation
+  window[`containerData_${index}`] = c;
+  
+  return `
+    <div class="db-card" data-db-type="${c.db_type}">
+      <div class="db-card-header">
+        <div class="db-card-icon">${dbIcon}</div>
+        <div class="db-card-info">
+          <h3 class="db-card-title">${c.name}</h3>
+          <span class="db-card-meta">${dbTypeName} ${c.database_name}</span>
+        </div>
+        <span class="db-status db-status-${c.status}">${c.status}</span>
+      </div>
+      
+      <div class="db-card-data">
+        <div class="db-data-item" onclick="copyToClipboard('${c.port}', 'Port copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Port</span>
+          <span class="db-data-value">${c.port}</span>
+        </div>
+        <div class="db-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Container ID</span>
+          <span class="db-data-value">${shortId}</span>
+        </div>
+        <div class="db-data-item" onclick="copyToClipboard('${c.created}', 'Date copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Created</span>
+          <span class="db-data-value">${c.created}</span>
+        </div>
+        <div class="db-data-item" onclick="copyToClipboard('localhost:${c.port}', 'Connection copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Connection</span>
+          <span class="db-data-value">localhost:${c.port}</span>
+        </div>
+      </div>
+      
+      <div class="db-card-actions">
+        <button class="db-action-btn db-btn-copy-url" onclick="copyConnectionURL(window.containerData_${index})" data-tooltip="Copy connection URL">
+          ${getIcon('link')}
+        </button>
+        ${
+          c.status === 'running'
+            ? `
+          <button class="db-action-btn db-btn-monitor" onclick="openMonitoringModal('${c.id}', '${c.name}')" data-tooltip="Monitor resources">
+            ${getIcon('chartBar')}
+          </button>
+          <button class="db-action-btn db-btn-stop" onclick="stopC('${c.id}')" data-tooltip="Stop container">
+            ${getIcon('pause')}
+          </button>
+          <button class="db-action-btn db-btn-logs" onclick="showLogs('${c.id}')" data-tooltip="View logs">
+            ${getIcon('fileText')}
+          </button>
+          ${
+            c.db_type === 'postgresql' ||
+            c.db_type === 'mysql' ||
+            c.db_type === 'mariadb'
+              ? `
+            <button class="db-action-btn db-btn-sql" onclick="showSQL('${c.id}','${c.database_name}')" data-tooltip="Open SQL console">
+              ${getIcon('terminal')}
+            </button>
+          `
+              : ''
+          }
+          <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
+            ${getIcon('rotateCw')}
+          </button>
+        `
+            : `
+          <button class="db-action-btn db-btn-start" onclick="startC('${c.id}')" data-tooltip="Start container">
+            ${getIcon('play')}
+          </button>
+          <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
+            ${getIcon('rotateCw')}
+          </button>
+        `
+        }
+        <button 
+          class="db-action-btn db-btn-edit" 
+          data-container-id="${c.id}" 
+          data-container-name="${c.name.replace(/"/g, '&quot;')}" 
+          onclick="openRenameModalFromButton(this)" 
+          data-tooltip="Rename container"
+        >
+          ${getIcon('edit')}
+        </button>
+        <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name.replace(/'/g, "\\'")}' )" data-tooltip="Delete container">
+          ${getIcon('trash')}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Load containers with intelligent caching and virtual scrolling
+ * @param {boolean} applyFilters - If true, use cached data with filters
+ * @param {boolean} forceRefresh - If true, bypass cache and fetch fresh data
+ */
+async function loadContainers(applyFilters = false, forceRefresh = false) {
   try {
-    // Si no se está aplicando filtros, recargar desde la API
-    if (!applyFilters) {
-      allContainers = await invoke('list_containers');
+    // If not applying filters or force refresh, fetch from API with cache
+    if (!applyFilters || forceRefresh) {
+      if (forceRefresh) {
+        cache.invalidate('containers');
+      }
+      
+      allContainers = await cache.get(
+        'containers',
+        () => invoke('list_containers'),
+        30000 // 30 second TTL
+      );
     }
     
     const list = document.getElementById('containers-list');
@@ -340,6 +476,12 @@ async function loadContainers(applyFilters = false) {
     }
 
     if (!containers.length) {
+      // Destroy virtual scroll if exists
+      if (containersVirtualScroll) {
+        containersVirtualScroll.destroy();
+        containersVirtualScroll = null;
+      }
+      
       list.innerHTML = '';
       noData.style.display = 'block';
       if (resultsCount) {
@@ -364,111 +506,45 @@ async function loadContainers(applyFilters = false) {
       }
     }
 
-    list.innerHTML = containers
-      .map((c, index) => {
-        const shortId = c.id.substring(0, 12);
-        const dbTypeName =
-          c.db_type.charAt(0).toUpperCase() + c.db_type.slice(1);
-
-        const dbIconMap = {
-          postgresql: 'postgresql',
-          mysql: 'mysql',
-          mongodb: 'mongodb',
-          redis: 'redis',
-          mariadb: 'mariadb',
-        };
-        const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
+    // Use virtual scrolling for large lists (>50 items)
+    const VIRTUAL_SCROLL_THRESHOLD = 50;
+    
+    if (containers.length > VIRTUAL_SCROLL_THRESHOLD) {
+      // Initialize or update virtual scroll
+      if (!containersVirtualScroll) {
+        // Find the scroll container (main-content or containers-section)
+        const scrollContainer = document.querySelector('.main-content') || 
+                               list.closest('.containers-section') || 
+                               list.parentElement;
         
-        // Store container data for URL generation
-        window[`containerData_${index}`] = c;
+        // Mark list as using virtual scrolling
+        list.classList.add('virtual-scrolling');
+        list.classList.remove('containers-grid');
         
-        return `
-      <div class="db-card" data-db-type="${c.db_type}">
-        <div class="db-card-header">
-          <div class="db-card-icon">${dbIcon}</div>
-          <div class="db-card-info">
-            <h3 class="db-card-title">${c.name}</h3>
-            <span class="db-card-meta">${dbTypeName} ${c.database_name}</span>
-          </div>
-          <span class="db-status db-status-${c.status}">${c.status}</span>
-        </div>
-        
-        <div class="db-card-data">
-          <div class="db-data-item" onclick="copyToClipboard('${c.port}', 'Port copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Port</span>
-            <span class="db-data-value">${c.port}</span>
-          </div>
-          <div class="db-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Container ID</span>
-            <span class="db-data-value">${shortId}</span>
-          </div>
-          <div class="db-data-item" onclick="copyToClipboard('${c.created}', 'Date copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Created</span>
-            <span class="db-data-value">${c.created}</span>
-          </div>
-          <div class="db-data-item" onclick="copyToClipboard('localhost:${c.port}', 'Connection copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Connection</span>
-            <span class="db-data-value">localhost:${c.port}</span>
-          </div>
-        </div>
-        
-        <div class="db-card-actions">
-          <button class="db-action-btn db-btn-copy-url" onclick="copyConnectionURL(window.containerData_${index})" data-tooltip="Copy connection URL">
-            ${getIcon('link')}
-          </button>
-          ${
-            c.status === 'running'
-              ? `
-            <button class="db-action-btn db-btn-monitor" onclick="openMonitoringModal('${c.id}', '${c.name}')" data-tooltip="Monitor resources">
-              ${getIcon('chartBar')}
-            </button>
-            <button class="db-action-btn db-btn-stop" onclick="stopC('${c.id}')" data-tooltip="Stop container">
-              ${getIcon('pause')}
-            </button>
-            <button class="db-action-btn db-btn-logs" onclick="showLogs('${c.id}')" data-tooltip="View logs">
-              ${getIcon('fileText')}
-            </button>
-            ${
-              c.db_type === 'postgresql' ||
-              c.db_type === 'mysql' ||
-              c.db_type === 'mariadb'
-                ? `
-              <button class="db-action-btn db-btn-sql" onclick="showSQL('${c.id}','${c.database_name}')" data-tooltip="Open SQL console">
-                ${getIcon('terminal')}
-              </button>
-            `
-                : ''
-            }
-            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
-              ${getIcon('rotateCw')}
-            </button>
-          `
-              : `
-            <button class="db-action-btn db-btn-start" onclick="startC('${c.id}')" data-tooltip="Start container">
-              ${getIcon('play')}
-            </button>
-            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
-              ${getIcon('rotateCw')}
-            </button>
-          `
-          }
-          <button 
-            class="db-action-btn db-btn-edit" 
-            data-container-id="${c.id}" 
-            data-container-name="${c.name.replace(/"/g, '&quot;')}" 
-            onclick="openRenameModalFromButton(this)" 
-            data-tooltip="Rename container"
-          >
-            ${getIcon('edit')}
-          </button>
-          <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name.replace(/'/g, "\\'")}' )" data-tooltip="Delete container">
-            ${getIcon('trash')}
-          </button>
-        </div>
-      </div>
-    `;
-      })
-      .join('');
+        containersVirtualScroll = new VirtualScroll({
+          container: list,
+          scrollContainer: scrollContainer,
+          items: containers,
+          renderItem: renderContainerCard,
+          itemHeight: 180, // Estimated height of db-card
+          buffer: 3
+        });
+      } else {
+        containersVirtualScroll.setItems(containers);
+      }
+    } else {
+      // For small lists, use traditional rendering
+      if (containersVirtualScroll) {
+        containersVirtualScroll.destroy();
+        containersVirtualScroll = null;
+        list.classList.remove('virtual-scrolling');
+        list.classList.add('containers-grid');
+      }
+      
+      list.innerHTML = containers
+        .map((c, index) => renderContainerCard(c, index))
+        .join('');
+    }
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   }
@@ -536,13 +612,17 @@ function initializeMigrationSearchFilters() {
   }
 }
 
-// ===== DASHBOARD =====
+/**
+ * Load dashboard statistics with caching
+ */
 async function loadDashboardStats() {
   try {
     console.log('Loading dashboard stats...');
+    
+    // Use cache for containers and images
     const [containers, images] = await Promise.all([
-      invoke('list_containers'),
-      invoke('list_images')
+      cache.get('containers', () => invoke('list_containers'), 30000),
+      cache.get('images', () => invoke('list_images'), 60000)
     ]);
     
     console.log('Containers loaded:', containers.length);
@@ -701,8 +781,13 @@ async function createDB(e) {
 
     showNotification('Database created successfully', 'success');
     selectedTemplateForDb = null; // Reset template selection
+    
+    // Invalidate cache to show new database
+    cache.invalidate('containers');
+    cache.invalidate('images');
+    
     window.closeCreateModal();
-    await loadContainers();
+    await loadContainers(false, true);
     await loadDashboardStats(); // Actualizar dashboard también
   } catch (e) {
     console.error('Error creating database:', e);
@@ -718,7 +803,10 @@ async function startC(id) {
   try {
     await invoke('start_container', { containerId: id });
     showNotification('Container started', 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -732,7 +820,10 @@ async function stopC(id) {
   try {
     await invoke('stop_container', { containerId: id });
     showNotification('Container stopped', 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -746,7 +837,10 @@ async function restartC(id) {
   try {
     await invoke('restart_container', { containerId: id });
     showNotification('Container restarted', 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -894,7 +988,11 @@ async function executeRemove(id) {
       removeVolumes: Boolean(removeVolumes),
     });
     showNotification(result, 'success');
-    await loadContainers();
+    
+    // Invalidate all related cache
+    cache.invalidate('containers');
+    cache.invalidate('volumes');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -1003,7 +1101,10 @@ async function executeRename(e) {
     
     console.log('[executeRename] Success:', result);
     showNotification(result, 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     console.error('[executeRename] Error:', e);
@@ -1227,6 +1328,143 @@ window.changeLanguage = (lang) => {
   // TODO: Implementar i18n completo
 };
 
+/**
+ * Setup intelligent polling system
+ */
+function setupPolling() {
+  console.log('[Setup] Initializing intelligent polling...');
+  
+  // Register polling tasks
+  
+  // Task 1: Update containers when on databases tab
+  polling.register(
+    'containers',
+    async () => {
+      try {
+        if (await checkDocker()) {
+          cache.invalidate('containers');
+          await loadContainers(false, true);
+        }
+      } catch (e) {
+        console.error('[Polling] Error updating containers:', e);
+      }
+    },
+    30000, // 30 seconds
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: 'databases'
+    }
+  );
+  
+  // Task 2: Update dashboard stats when on dashboard tab
+  polling.register(
+    'dashboard',
+    async () => {
+      try {
+        if (await checkDocker()) {
+          // Only invalidate, don't force refresh (use cache if valid)
+          await loadDashboardStats();
+        }
+      } catch (e) {
+        console.error('[Polling] Error updating dashboard:', e);
+      }
+    },
+    30000, // 30 seconds
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: 'dashboard'
+    }
+  );
+  
+  // Task 3: Update images when on images tab (less frequently)
+  polling.register(
+    'images',
+    async () => {
+      try {
+        if (await checkDocker()) {
+          cache.invalidate('images');
+          await loadImages(false, true);
+        }
+      } catch (e) {
+        console.error('[Polling] Error updating images:', e);
+      }
+    },
+    60000, // 60 seconds (images change less frequently)
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: 'images'
+    }
+  );
+  
+  // Task 4: Check Docker connection health
+  polling.register(
+    'docker-health',
+    async () => {
+      try {
+        await checkDocker();
+      } catch (e) {
+        console.error('[Polling] Docker health check failed:', e);
+      }
+    },
+    60000, // 60 seconds
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: null // Run on all tabs
+    }
+  );
+  
+  console.log('[Setup] Polling initialized:', polling.getStats());
+}
+
+/**
+ * Cleanup polling on page unload
+ */
+window.addEventListener('beforeunload', () => {
+  polling.clear();
+  cache.clear();
+});
+
+// Development tools - only available in dev mode
+if (window.location.hostname === 'localhost' || window.location.hostname === 'tauri.localhost') {
+  window.__DEV__ = {
+    cache: {
+      stats: () => {
+        const stats = cache.getStats();
+        console.table(stats.entries);
+        return stats;
+      },
+      clear: () => cache.clear(),
+      invalidate: (key) => cache.invalidate(key),
+      get: (key) => {
+        const cached = cache.cache.get(key);
+        return cached ? cached.data : null;
+      }
+    },
+    polling: {
+      stats: () => {
+        const stats = polling.getStats();
+        console.table(stats.tasks);
+        return stats;
+      },
+      pause: (key) => polling.pause(key),
+      resume: (key) => polling.resume(key),
+      pauseAll: () => polling.pauseAll(),
+      resumeAll: () => polling.resumeAll(),
+    },
+    state: {
+      containers: () => allContainers,
+      images: () => allImages,
+    }
+  };
+  
+  console.log('%c[DEV] Development tools available at window.__DEV__', 'color: #10b981; font-weight: bold');
+  console.log('%cTry: __DEV__.cache.stats() or __DEV__.polling.stats()', 'color: #94a3b8');
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     // Esperar a que Tauri esté disponible
@@ -1287,7 +1525,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Event listeners
     document.getElementById('new-db-btn').onclick = openCreateModal;
     document.getElementById('refresh-btn').onclick = async () => {
-      await loadContainers();
+      cache.invalidatePattern('.*'); // Invalidate all cache
+      await loadContainers(false, true);
       await loadDashboardStats();
     };
     document.getElementById('create-form').onsubmit = createDB;
@@ -1301,10 +1540,13 @@ window.addEventListener('DOMContentLoaded', async () => {
           // Cargar dashboard primero ya que es la tab activa por defecto
           await loadDashboardStats();
           // Luego cargar containers para la tab databases
-          await loadContainers();
+          await loadContainers(false, true);
           document.getElementById('docker-status').textContent =
             'Docker connected';
           console.log('✅ Initial data loaded');
+          
+          // Setup intelligent polling
+          setupPolling();
         } else {
           console.warn('⚠️ Docker not connected on startup');
           document.getElementById('docker-status').textContent =
@@ -1319,25 +1561,6 @@ window.addEventListener('DOMContentLoaded', async () => {
           '❌ Docker not connected';
         showDockerError();
       });
-
-    // Actualizar cada 30 segundos (aumentado de 10 para reducir spam si Docker no está)
-    setInterval(async () => {
-      try {
-        if (await checkDocker()) {
-          // Solo cargar si la pestaña está activa
-          const dashboardTab = document.getElementById('tab-dashboard');
-          const databasesTab = document.getElementById('tab-databases');
-          
-          if (databasesTab?.classList.contains('active')) {
-            await loadContainers();
-          } else if (dashboardTab?.classList.contains('active')) {
-            await loadDashboardStats();
-          }
-        }
-      } catch (e) {
-        console.error('Error en actualización periódica:', e);
-      }
-    }, 30000); // 30 segundos
 
     // Verificar actualizaciones después de 3 segundos
     setTimeout(() => checkForUpdates(true), 3000);
@@ -1378,6 +1601,9 @@ window.switchTab = (tabName) => {
     content.classList.remove('active');
   });
   document.getElementById(`tab-${tabName}`)?.classList.add('active');
+
+  // Notify polling manager about tab change
+  polling.setActiveTab(tabName);
 
   // Load data based on active tab - RECARGAR SIEMPRE CON TRADUCCIONES
   if (tabName === 'dashboard') {
@@ -1856,17 +2082,29 @@ window.closeDeleteOriginalModal = closeDeleteOriginalModal;
 window.executeDeleteOriginalDatabase = executeDeleteOriginalDatabase;
 window.removeMigratedDatabase = removeMigratedDatabase;
 
-// ===== IMAGES TAB =====
-async function loadImages(applyFilters = false) {
+/**
+ * Load images with intelligent caching
+ * @param {boolean} applyFilters - If true, use cached data with filters
+ * @param {boolean} forceRefresh - If true, bypass cache
+ */
+async function loadImages(applyFilters = false, forceRefresh = false) {
   const list = document.getElementById('images-list');
   const noData = document.getElementById('no-images');
   const resultsCount = document.getElementById('results-count-images');
 
   try {
     // Si no se está aplicando filtros, recargar desde la API
-    if (!applyFilters) {
+    if (!applyFilters || forceRefresh) {
+      if (forceRefresh) {
+        cache.invalidate('images');
+      }
+      
       showLoading('loadingImages');
-      allImages = await invoke('list_images');
+      allImages = await cache.get(
+        'images',
+        () => invoke('list_images'),
+        60000 // 60 second TTL (images change less frequently)
+      );
       console.log('[loadImages] Loaded from API:', allImages.length, 'images');
     }
 
@@ -1988,7 +2226,10 @@ async function executeRemoveImage(id) {
   try {
     await invoke('remove_image', { imageId: id });
     showNotification('Image removed successfully', 'success');
-    await loadImages();
+    
+    // Invalidate cache
+    cache.invalidate('images');
+    await loadImages(false, true);
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   } finally {
