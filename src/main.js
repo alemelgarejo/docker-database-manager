@@ -11,6 +11,7 @@ import { polling } from './lib/utils/polling.js';
 import { VirtualScroll } from './lib/utils/virtualScroll.js';
 import { createLogger } from './lib/utils/logger.js';
 import { setupDevTools } from './lib/dev-tools.js';
+import { appState } from './lib/state/AppState.js';
 
 // Create loggers for different contexts
 const logger = createLogger('Main');
@@ -42,19 +43,8 @@ function getTauriAPI() {
   });
 }
 
-// Variables globales para la API
+// Backward compatibility getters (deprecated - use appState instead)
 let invoke, check, ask, relaunch;
-
-// Componente de búsqueda y filtros
-let searchFilters = null;
-let imagesSearchFilters = null;
-let migrationSearchFilters = null;
-let composeManager = null;
-let allContainers = []; // Cache de todos los contenedores
-let allImages = []; // Cache de todas las imágenes
-
-// Virtual scrolling instance for containers
-let containersVirtualScroll = null;
 
 logger.info('Application starting...');
 logger.debug('Waiting for Tauri API...');
@@ -465,16 +455,23 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
         cache.invalidate('containers');
       }
       
-      allContainers = await cache.get(
+      const containers = await cache.get(
         'containers',
         () => invoke('list_containers'),
         30000 // 30 second TTL
       );
+      
+      // Update state
+      appState.setData('allContainers', containers);
     }
     
     const list = document.getElementById('containers-list');
     const noData = document.getElementById('no-containers');
     const resultsCount = document.getElementById('results-count');
+
+    // Get data from state
+    const allContainers = appState.getData('allContainers');
+    const searchFilters = appState.getComponent('searchFilters');
 
     // Aplicar filtros si el componente existe
     let containers = allContainers;
@@ -484,9 +481,10 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
 
     if (!containers.length) {
       // Destroy virtual scroll if exists
-      if (containersVirtualScroll) {
-        containersVirtualScroll.destroy();
-        containersVirtualScroll = null;
+      const virtualScroll = appState.getComponent('containersVirtualScroll');
+      if (virtualScroll) {
+        virtualScroll.destroy();
+        appState.setComponent('containersVirtualScroll', null);
       }
       
       list.innerHTML = '';
@@ -518,7 +516,9 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
     
     if (containers.length > VIRTUAL_SCROLL_THRESHOLD) {
       // Initialize or update virtual scroll
-      if (!containersVirtualScroll) {
+      let virtualScroll = appState.getComponent('containersVirtualScroll');
+      
+      if (!virtualScroll) {
         // Find the scroll container (main-content or containers-section)
         const scrollContainer = document.querySelector('.main-content') || 
                                list.closest('.containers-section') || 
@@ -528,7 +528,7 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
         list.classList.add('virtual-scrolling');
         list.classList.remove('containers-grid');
         
-        containersVirtualScroll = new VirtualScroll({
+        virtualScroll = new VirtualScroll({
           container: list,
           scrollContainer: scrollContainer,
           items: containers,
@@ -536,14 +536,18 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
           itemHeight: 180, // Estimated height of db-card
           buffer: 3
         });
+        
+        appState.setComponent('containersVirtualScroll', virtualScroll);
       } else {
-        containersVirtualScroll.setItems(containers);
+        virtualScroll.setItems(containers);
       }
     } else {
       // For small lists, use traditional rendering
-      if (containersVirtualScroll) {
-        containersVirtualScroll.destroy();
-        containersVirtualScroll = null;
+      const virtualScroll = appState.getComponent('containersVirtualScroll');
+      
+      if (virtualScroll) {
+        virtualScroll.destroy();
+        appState.setComponent('containersVirtualScroll', null);
         list.classList.remove('virtual-scrolling');
         list.classList.add('containers-grid');
       }
@@ -560,7 +564,8 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
 // ===== SEARCH & FILTERS =====
 function initializeSearchFilters() {
   // Crear instancia del componente para databases
-  searchFilters = new SearchFilters('databases');
+  const searchFilters = new SearchFilters('databases');
+  appState.setComponent('searchFilters', searchFilters);
   
   // Renderizar el componente en el DOM
   const searchContainer = document.getElementById('search-filters');
@@ -577,18 +582,19 @@ function initializeSearchFilters() {
 
 function initializeImagesSearchFilters() {
   // Crear instancia del componente para images
-  imagesSearchFilters = new SearchFilters('images');
+  const imagesSearchFilters = new SearchFilters('images');
+  appState.setComponent("imagesSearchFilters", imagesSearchFilters);
   console.log('[initializeImagesSearchFilters] Component created');
   
   // Renderizar el componente en el DOM
   const searchContainer = document.getElementById('search-filters-images');
   if (searchContainer) {
-    searchContainer.innerHTML = imagesSearchFilters.render();
-    imagesSearchFilters.attachEventListeners();
+    searchContainer.innerHTML = appState.getComponent("imagesSearchFilters").render();
+    appState.getComponent("imagesSearchFilters").attachEventListeners();
     console.log('[initializeImagesSearchFilters] Component rendered and attached');
     
     // Suscribirse a cambios de filtros
-    imagesSearchFilters.onChange(() => {
+    appState.getComponent("imagesSearchFilters").onChange(() => {
       console.log('[imagesSearchFilters] Filter changed, reloading...');
       loadImages(true); // true = aplicar filtros sin recargar desde API
     });
@@ -739,7 +745,10 @@ function loadRecentContainers(containers) {
 async function createDB(e) {
   e.preventDefault();
 
-  if (!selectedDbType) {
+  const selectedDbType = appState.getUI('selectedDbType');
+  const selectedTemplateForDb = appState.getUI('selectedTemplateForDb');
+  
+  if (!appState.getUI("selectedDbType")) {
     showNotification('Please select a database type', 'error');
     return;
   }
@@ -757,17 +766,17 @@ async function createDB(e) {
       username: document.getElementById('db-username').value || '',
       password: document.getElementById('db-password').value || '',
       port: parseInt(document.getElementById('db-port').value, 10),
-      version: versionSelect ? versionSelect.getValue() : '',
-      type: selectedDbType,
+      version: appState.getComponent('versionSelect') ? appState.getComponent('versionSelect').getValue() : '',
+      type: appState.getUI("selectedDbType"),
     };
 
     // Apply template if selected
-    if (selectedTemplateForDb) {
-      console.log('[TEMPLATE] Applying template:', selectedTemplateForDb);
-      console.log('[TEMPLATE] DB Type:', selectedDbType);
+    if (appState.getUI("selectedTemplateForDb")) {
+      console.log('[TEMPLATE] Applying template:', appState.getUI("selectedTemplateForDb"));
+      console.log('[TEMPLATE] DB Type:', appState.getUI("selectedDbType"));
       console.log('[TEMPLATE] Base config before:', config);
       
-      const templateConfig = applyTemplate(selectedTemplateForDb, selectedDbType, config);
+      const templateConfig = applyTemplate(appState.getUI("selectedTemplateForDb"), appState.getUI("selectedDbType"), config);
       config = { ...config, ...templateConfig };
       
       console.log('[TEMPLATE] Applied template configuration:', templateConfig);
@@ -1042,7 +1051,7 @@ async function showLogs(id) {
 }
 
 // Variables globales para el modal de rename
-let currentRenameContainerId = null;
+// Removed: currentRenameContainerId = null; // Now using appState
 
 function openRenameModalFromButton(button) {
   const containerId = button.getAttribute('data-container-id');
@@ -1053,7 +1062,7 @@ function openRenameModalFromButton(button) {
 
 function openRenameModal(containerId, currentName) {
   console.log('[openRenameModal]', { containerId, currentName });
-  currentRenameContainerId = containerId;
+  appState.setModal("currentRenameContainerId", containerId);
   document.getElementById('rename-current-name').textContent = currentName;
   document.getElementById('rename-new-name').value = currentName;
   document.getElementById('rename-modal').classList.add('active');
@@ -1066,7 +1075,7 @@ function openRenameModal(containerId, currentName) {
 function closeRenameModal() {
   document.getElementById('rename-modal').classList.remove('active');
   document.getElementById('rename-form').reset();
-  currentRenameContainerId = null;
+  appState.setModal("currentRenameContainerId", null);
 }
 
 async function executeRename(e) {
@@ -1075,7 +1084,7 @@ async function executeRename(e) {
   
   console.log('[executeRename] Starting...', {
     newName,
-    currentRenameContainerId,
+    containerId: appState.getModal("currentRenameContainerId"),
   });
   
   if (!newName) {
@@ -1083,14 +1092,14 @@ async function executeRename(e) {
     return;
   }
 
-  if (!currentRenameContainerId) {
+  if (!appState.getModal("currentRenameContainerId")) {
     console.error('[executeRename] currentRenameContainerId is null or undefined!');
     showNotification('No container selected', 'error');
     return;
   }
 
   // ¡GUARDAR EL ID EN UNA VARIABLE LOCAL ANTES DE CERRAR EL MODAL!
-  const containerIdToRename = currentRenameContainerId;
+  const containerIdToRename = appState.getModal("currentRenameContainerId");
   
   closeRenameModal();
   showLoading('Renaming container...');
@@ -1121,9 +1130,9 @@ async function executeRename(e) {
   }
 }
 
-let currentSQL = null;
+// Removed: currentSQL = null; // Now using appState
 function showSQL(id, db) {
-  currentSQL = { id, db };
+  appState.setModal("currentSQL", { id, db });
   document.getElementById('sql-modal').classList.add('active');
 }
 
@@ -1135,8 +1144,8 @@ async function execSQL(e) {
   output.textContent = 'Ejecutando...';
   try {
     const result = await invoke('exec_sql', {
-      containerId: currentSQL.id,
-      database: currentSQL.db,
+      containerId: appState.getModal("currentSQL").id,
+      database: appState.getModal("currentSQL").db,
       username: 'postgres',
       sql: sql,
     });
@@ -1147,14 +1156,14 @@ async function execSQL(e) {
 }
 
 // Variables globales para el modal de creación
-let selectedDbType = null;
-let databaseTypes = [];
+// Database types - now in appState.data.databaseTypes
 
 // Cargar tipos de bases de datos
 async function loadDatabaseTypes() {
   try {
-    databaseTypes = await invoke('get_database_types');
-    console.log('Database types loaded:', databaseTypes);
+    const types = await invoke('get_database_types');
+    appState.setData('databaseTypes', types);
+    console.log('Database types loaded:', types);
   } catch (e) {
     console.error('Error loading database types:', e);
     showNotification('Error cargando tipos de BD: ' + e, 'error');
@@ -1196,7 +1205,7 @@ function showStep2() {
   document.getElementById('step-1').style.display = 'none';
   document.getElementById('step-2').style.display = 'block';
 
-  const dbType = databaseTypes.find((t) => t.id === selectedDbType);
+  const dbType = databaseTypes.find((t) => t.id === appState.getUI("selectedDbType"));
   if (!dbType) return;
 
   // Actualizar encabezado
@@ -1207,7 +1216,7 @@ function showStep2() {
   // Añadir data attribute al contenedor seleccionado
   const selectedDbTypeDiv = document.querySelector('.selected-db-type');
   if (selectedDbTypeDiv) {
-    selectedDbTypeDiv.setAttribute('data-db-type', selectedDbType);
+    selectedDbTypeDiv.setAttribute('data-db-type', appState.getUI('selectedDbType'));
   }
 
   // Inyectar icono en botón back
@@ -1224,12 +1233,12 @@ function showStep2() {
   const usernameGroup = document.getElementById('username-group');
   const passwordGroup = document.getElementById('password-group');
 
-  if (selectedDbType === 'redis') {
+  if (appState.getUI('selectedDbType') === 'redis') {
     // Redis no requiere usuario, contraseña es opcional
     usernameGroup.style.display = 'none';
     passwordGroup.querySelector('input').required = false;
     passwordGroup.querySelector('label').textContent = 'Contraseña (opcional):';
-  } else if (selectedDbType === 'mongodb') {
+  } else if (appState.getUI('selectedDbType') === 'mongodb') {
     // MongoDB puede funcionar sin autenticación
     usernameGroup.style.display = 'block';
     passwordGroup.style.display = 'block';
@@ -1254,28 +1263,29 @@ function showStep2() {
   }));
 
   // Destroy previous instance if exists
-  if (versionSelect) {
-    versionSelect.destroy();
+  if (appState.getComponent("versionSelect")) {
+    appState.getComponent("versionSelect").destroy();
   }
 
   // Create new CustomSelect for versions
-  versionSelect = new CustomSelect('db-version-select', {
+  const versionSelect = new CustomSelect('db-version-select', {
     placeholder: 'Select version',
     items: versionItems,
     value: versionItems[0]?.value || '',
     required: true
   });
+  appState.setComponent("versionSelect", versionSelect);
 }
 
 // Seleccionar tipo de base de datos
 window.selectDatabaseType = (typeId) => {
-  selectedDbType = typeId;
+  appState.setUI("selectedDbType", typeId);
   showStep2();
 };
 
 // Volver al paso 1
 window.goBackToStep1 = () => {
-  selectedDbType = null;
+  appState.setUI("selectedDbType", null);
   showStep1();
   document.getElementById('create-form').reset();
 };
@@ -1297,7 +1307,7 @@ window.openCreateModal = () => {
 window.closeCreateModal = () => {
   document.getElementById('create-modal').classList.remove('active');
   document.getElementById('create-form').reset();
-  selectedDbType = null;
+  appState.setUI("selectedDbType", null);
   showStep1();
 };
 
@@ -1632,9 +1642,9 @@ window.switchTab = (tabName) => {
 };
 
 // ===== LOCAL POSTGRES MIGRATION =====
-let localPostgresConfig = null;
-let allLocalDatabases = [];
-let allMigratedDatabases = [];
+// Removed: localPostgresConfig = null; // Now using appState
+// Removed: allLocalDatabases = []; // Now using appState
+// Removed: allMigratedDatabases = []; // Now using appState
 
 async function checkLocalPostgres() {
   const statusDot = document.getElementById('status-dot');
@@ -1688,7 +1698,7 @@ async function connectLocalPostgres(e) {
 
   try {
     const _result = await invoke('connect_local_postgres', { config });
-    localPostgresConfig = config;
+  appState.setMigration("localPostgresConfig", config);
 
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
@@ -1720,14 +1730,14 @@ async function loadLocalDatabases() {
 
   try {
     const databases = await invoke('list_local_databases', {
-      config: localPostgresConfig,
+      config: appState.getMigration("localPostgresConfig"),
     });
 
     if (!databases.length) {
       list.innerHTML = '';
       noData.style.display = 'block';
       container.style.display = 'block';
-      allLocalDatabases = [];
+  appState.setData("allLocalDatabases", []);
       return;
     }
 
@@ -1735,7 +1745,7 @@ async function loadLocalDatabases() {
     container.style.display = 'block';
 
     // Store all databases
-    allLocalDatabases = databases;
+  appState.setData("allLocalDatabases", databases);
 
     // Inicializar el componente de filtros si no existe
     if (!migrationSearchFilters) {
@@ -1756,10 +1766,10 @@ function renderLocalDatabases() {
   if (!list) return;
 
   console.log('[renderLocalDatabases] migrationSearchFilters exists:', !!migrationSearchFilters);
-  console.log('[renderLocalDatabases] allLocalDatabases length:', allLocalDatabases?.length || 0);
+  console.log('[renderLocalDatabases] appState.getData("allLocalDatabases") length:', appState.getData("allLocalDatabases")?.length || 0);
 
   // Aplicar filtros si el componente existe
-  let filteredDatabases = allLocalDatabases || [];
+  let filteredDatabases = appState.getData("allLocalDatabases") || [];
   if (migrationSearchFilters) {
     console.log('[renderLocalDatabases] Applying filters...');
     filteredDatabases = migrationSearchFilters.applyFilters(filteredDatabases);
@@ -1770,11 +1780,11 @@ function renderLocalDatabases() {
     list.innerHTML = '';
     noData.style.display = 'block';
     if (resultsCount) {
-      resultsCount.textContent = (allLocalDatabases && allLocalDatabases.length > 0) 
+      resultsCount.textContent = (appState.getData("allLocalDatabases") && appState.getData("allLocalDatabases").length > 0) 
         ? 'No results found' 
         : '';
     }
-    if (allLocalDatabases && allLocalDatabases.length > 0) {
+    if (appState.getData("allLocalDatabases") && appState.getData("allLocalDatabases").length > 0) {
       noData.querySelector('p').textContent = 'No databases match your search criteria.';
     } else {
       noData.querySelector('p').textContent = 'No databases found in local PostgreSQL';
@@ -1788,7 +1798,7 @@ function renderLocalDatabases() {
   if (resultsCount) {
     if (migrationSearchFilters && migrationSearchFilters.getActiveFiltersCount() > 0) {
       resultsCount.innerHTML = `
-        Showing <strong>${filteredDatabases.length}</strong> of <strong>${allLocalDatabases.length}</strong> databases
+        Showing <strong>${filteredDatabases.length}</strong> of <strong>${appState.getData("allLocalDatabases").length}</strong> databases
         <span class="filter-badge">${migrationSearchFilters.getActiveFiltersCount()} active filters</span>
       `;
     } else {
@@ -1872,7 +1882,7 @@ async function startMigration(dbName) {
 
   try {
     const _result = await invoke('migrate_database', {
-      config: localPostgresConfig,
+      config: appState.getMigration("localPostgresConfig"),
       databaseName: dbName,
     });
 
@@ -1950,7 +1960,7 @@ async function executeDeleteOriginalDatabase(dbName) {
 
   try {
     await invoke('delete_original_database', {
-      config: localPostgresConfig,
+      config: appState.getMigration("localPostgresConfig"),
       databaseName: dbName,
     });
 
@@ -1977,7 +1987,7 @@ async function loadMigratedDatabases() {
       list.innerHTML = '';
       noData.style.display = 'block';
       container.style.display = 'none';
-      allMigratedDatabases = [];
+  appState.setData("allMigratedDatabases", []);
       return;
     }
 
@@ -2107,22 +2117,26 @@ async function loadImages(applyFilters = false, forceRefresh = false) {
       }
       
       showLoading('loadingImages');
-      allImages = await cache.get(
+      const images = await cache.get(
         'images',
         () => invoke('list_images'),
         60000 // 60 second TTL (images change less frequently)
       );
-      console.log('[loadImages] Loaded from API:', allImages.length, 'images');
+      appState.setData('allImages', images);
+      console.log('[loadImages] Loaded from API:', images.length, 'images');
     }
 
-    console.log('[loadImages] imagesSearchFilters exists:', !!imagesSearchFilters);
+    const imagesSearchFilters = appState.getComponent('imagesSearchFilters');
+    const allImages = appState.getData('allImages');
+    
+    console.log('[loadImages] appState.getComponent("imagesSearchFilters") exists:', !!imagesSearchFilters);
     console.log('[loadImages] allImages length:', allImages?.length || 0);
 
     // Aplicar filtros si el componente existe
     let images = allImages || [];
-    if (imagesSearchFilters) {
+    if (appState.getComponent("imagesSearchFilters")) {
       console.log('[loadImages] Applying filters...');
-      images = imagesSearchFilters.applyFilters(images);
+      images = appState.getComponent("imagesSearchFilters").applyFilters(images);
       console.log('[loadImages] After filters:', images.length, 'images');
     }
 
@@ -2141,10 +2155,10 @@ async function loadImages(applyFilters = false, forceRefresh = false) {
 
     // Mostrar información de resultados
     if (resultsCount) {
-      if (imagesSearchFilters && imagesSearchFilters.getActiveFiltersCount() > 0) {
+      if (imagesSearchFilters && appState.getComponent("imagesSearchFilters").getActiveFiltersCount() > 0) {
         resultsCount.innerHTML = `
           Showing <strong>${images.length}</strong> of <strong>${allImages.length}</strong> images
-          <span class="filter-badge">${imagesSearchFilters.getActiveFiltersCount()} active filters</span>
+          <span class="filter-badge">${appState.getComponent("imagesSearchFilters").getActiveFiltersCount()} active filters</span>
         `;
       } else {
         resultsCount.textContent = `Showing ${images.length} images`;
@@ -2250,7 +2264,7 @@ window.confirmRemoveImage = confirmRemoveImage;
 window.executeRemoveImage = executeRemoveImage;
 
 // ===== VOLUMES MANAGEMENT =====
-let currentVolume = null;
+// Removed: currentVolume = null; // Now using appState
 
 async function loadVolumes() {
   const list = document.getElementById('volumes-list');
@@ -2393,7 +2407,7 @@ async function executePruneVolumes() {
 }
 
 function openBackupVolumeModal(volumeName) {
-  currentVolume = volumeName;
+  appState.setModal("currentVolume", volumeName);
   document.getElementById('backup-volume-name').textContent = volumeName;
   document.getElementById('backup-path').value = '';
   document.getElementById('backup-volume-modal').classList.add('active');
@@ -2401,7 +2415,7 @@ function openBackupVolumeModal(volumeName) {
 
 function closeBackupVolumeModal() {
   document.getElementById('backup-volume-modal').classList.remove('active');
-  currentVolume = null;
+  appState.setModal("currentVolume", null);
 }
 
 async function executeBackupVolume(e) {
@@ -2413,7 +2427,7 @@ async function executeBackupVolume(e) {
 
   try {
     const result = await invoke('backup_volume', {
-      volumeName: currentVolume,
+      volumeName: appState.getModal("currentVolume"),
       backupPath,
     });
     showNotification(result, 'success');
@@ -2425,7 +2439,7 @@ async function executeBackupVolume(e) {
 }
 
 function openRestoreVolumeModal(volumeName) {
-  currentVolume = volumeName;
+  appState.setModal("currentVolume", volumeName);
   document.getElementById('restore-volume-name').textContent = volumeName;
   document.getElementById('restore-file').value = '';
   document.getElementById('restore-volume-modal').classList.add('active');
@@ -2433,7 +2447,7 @@ function openRestoreVolumeModal(volumeName) {
 
 function closeRestoreVolumeModal() {
   document.getElementById('restore-volume-modal').classList.remove('active');
-  currentVolume = null;
+  appState.setModal("currentVolume", null);
 }
 
 async function executeRestoreVolume(e) {
@@ -2449,7 +2463,7 @@ async function executeRestoreVolume(e) {
 
   try {
     const result = await invoke('restore_volume', {
-      volumeName: currentVolume,
+      volumeName: appState.getModal("currentVolume"),
       backupFile,
     });
     showNotification(result, 'success');
@@ -2474,12 +2488,12 @@ window.closeRestoreVolumeModal = closeRestoreVolumeModal;
 window.executeRestoreVolume = executeRestoreVolume;
 
 // ===== MONITORING =====
-let currentMonitoringContainer = null;
-let monitoringInterval = null;
-let cpuChart = null;
-let memoryChart = null;
-let cpuHistory = [];
-let memoryHistory = [];
+// Removed: currentMonitoringContainer = null; // Now using appState
+// Removed: monitoringInterval = null; // Now using appState
+// Removed: appState.setMonitoring("cpuChart", null); // Now using appState
+// Removed: appState.setMonitoring("memoryChart", null); // Now using appState
+// Removed: cpuHistory = []; // Now using appState
+// Removed: memoryHistory = []; // Now using appState
 const MAX_HISTORY_POINTS = 30; // 30 puntos
 let currentChartType = 'line'; // 'line', 'bar', 'area'
 
@@ -2492,13 +2506,13 @@ function formatBytes(bytes) {
 }
 
 async function openMonitoringModal(containerId, containerName) {
-  currentMonitoringContainer = containerId;
+  appState.setModal("currentMonitoringContainer", containerId);
   document.getElementById('monitoring-container-name').textContent = containerName;
   document.getElementById('monitoring-modal').classList.add('active');
   
   // Reset historiales
-  cpuHistory = [];
-  memoryHistory = [];
+  appState.setMonitoring("cpuHistory", []);
+  appState.setMonitoring("memoryHistory", []);
   
   try {
     // Cargar Chart.js
@@ -2512,12 +2526,12 @@ async function openMonitoringModal(containerId, containerName) {
     await updateMonitoringStats();
     
     // Actualizar cada 2 segundos
-    monitoringInterval = setInterval(updateMonitoringStats, 2000);
+  appState.setMonitoring("interval", setInterval(updateMonitoringStats, 2000));
   } catch (e) {
     console.error('Error loading charts:', e);
     // Continuar sin gráficas
     await updateMonitoringStats();
-    monitoringInterval = setInterval(updateMonitoringStats, 2000);
+  appState.setMonitoring("interval", setInterval(updateMonitoringStats, 2000));
     showNotification('Charts unavailable, showing stats only', 'warning');
   }
 }
@@ -2525,22 +2539,21 @@ async function openMonitoringModal(containerId, containerName) {
 function closeMonitoringModal() {
   document.getElementById('monitoring-modal').classList.remove('active');
   
-  if (monitoringInterval) {
-    clearInterval(monitoringInterval);
-    monitoringInterval = null;
+  if (appState.getMonitoring("interval")) {
+    clearInterval(appState.getMonitoring("interval"));
+  appState.setMonitoring("interval", null);
   }
   
   // Destruir gráficas
-  if (cpuChart) {
-    cpuChart.destroy();
-    cpuChart = null;
+  if (appState.getMonitoring("cpuChart")) {
+    appState.getMonitoring("cpuChart").destroy();
+    appState.setMonitoring("cpuChart", null);
   }
-  if (memoryChart) {
-    memoryChart.destroy();
-    memoryChart = null;
+  if (appState.getMonitoring("memoryChart")) {
+    appState.getMonitoring("memoryChart").destroy();
+    appState.setMonitoring("memoryChart", null);
   }
-  
-  currentMonitoringContainer = null;
+  appState.setModal("currentMonitoringContainer", null);
 }
 
 function initializeCharts() {
@@ -2552,8 +2565,8 @@ function initializeCharts() {
   const Chart = window.Chart;
   
   // Destruir gráficas existentes
-  if (cpuChart) cpuChart.destroy();
-  if (memoryChart) memoryChart.destroy();
+  if (cpuChart) appState.getMonitoring("cpuChart").destroy();
+  if (memoryChart) appState.getMonitoring("memoryChart").destroy();
   
   const cpuCtx = document.getElementById('cpu-chart').getContext('2d');
   const memoryCtx = document.getElementById('memory-chart').getContext('2d');
@@ -2617,13 +2630,13 @@ function initializeCharts() {
     }
   };
   
-  cpuChart = new Chart(cpuCtx, {
+  const cpuChart = new Chart(cpuCtx, {
     type: chartType,
     data: {
       labels: [],
       datasets: [{
         label: 'CPU %',
-        data: cpuHistory,
+        data: appState.getMonitoring("cpuHistory"),
         borderColor: '#3b82f6',
         backgroundColor: isArea ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.7)',
         tension: currentChartType === 'line' || isArea ? 0.4 : 0,
@@ -2633,13 +2646,13 @@ function initializeCharts() {
     options: chartOptions
   });
   
-  memoryChart = new Chart(memoryCtx, {
+  const memoryChart = new Chart(memoryCtx, {
     type: chartType,
     data: {
       labels: [],
       datasets: [{
         label: 'Memory %',
-        data: memoryHistory,
+        data: appState.getMonitoring("memoryHistory"),
         borderColor: '#8b5cf6',
         backgroundColor: isArea ? 'rgba(139, 92, 246, 0.3)' : 'rgba(139, 92, 246, 0.7)',
         tension: currentChartType === 'line' || isArea ? 0.4 : 0,
@@ -2664,7 +2677,7 @@ function changeChartType(newType) {
   initializeCharts();
   
   // Actualizar inmediatamente con los datos actuales
-  if (cpuChart && memoryChart && cpuHistory.length > 0) {
+  if (cpuChart && memoryChart && appState.getMonitoring("cpuHistory").length > 0) {
     updateChartsData();
   }
 }
@@ -2672,11 +2685,11 @@ function changeChartType(newType) {
 // Función helper para actualizar datos de las gráficas
 function updateChartsData() {
   // SIN LABELS - Quitar las horas que funcionan mal
-  const labels = Array(cpuHistory.length).fill('');
+  const labels = Array(appState.getMonitoring("cpuHistory").length).fill('');
   
   // Calcular escala dinámica para CPU
-  const cpuMax = Math.max(...cpuHistory, 1);
-  const cpuMin = Math.min(...cpuHistory, 0);
+  const cpuMax = Math.max(...appState.getMonitoring("cpuHistory"), 1);
+  const cpuMin = Math.min(...appState.getMonitoring("cpuHistory"), 0);
   const cpuRange = cpuMax - cpuMin;
   
   // Si el rango es pequeño (< 5%), ajustar escala para mejor visualización
@@ -2700,8 +2713,8 @@ function updateChartsData() {
   }
   
   // Calcular escala dinámica para Memory
-  const memMax = Math.max(...memoryHistory, 1);
-  const memMin = Math.min(...memoryHistory, 0);
+  const memMax = Math.max(...appState.getMonitoring("memoryHistory"), 1);
+  const memMin = Math.min(...appState.getMonitoring("memoryHistory"), 0);
   const memRange = memMax - memMin;
   
   let memScaleMax, memScaleMin;
@@ -2720,20 +2733,20 @@ function updateChartsData() {
   }
   
   // Actualizar CPU chart con escala dinámica
-  cpuChart.data.labels = labels;
-  cpuChart.data.datasets[0].data = [...cpuHistory];
-  cpuChart.options.scales.y.min = cpuScaleMin;
-  cpuChart.options.scales.y.max = cpuScaleMax;
-  cpuChart.options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((cpuScaleMax - cpuScaleMin) / 4));
-  cpuChart.update('none');
+  appState.getMonitoring("cpuChart").data.labels = labels;
+  appState.getMonitoring("cpuChart").data.datasets[0].data = [...appState.getMonitoring("cpuHistory")];
+  appState.getMonitoring("cpuChart").options.scales.y.min = cpuScaleMin;
+  appState.getMonitoring("cpuChart").options.scales.y.max = cpuScaleMax;
+  appState.getMonitoring("cpuChart").options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((cpuScaleMax - cpuScaleMin) / 4));
+  appState.getMonitoring("cpuChart").update('none');
   
   // Actualizar Memory chart con escala dinámica
-  memoryChart.data.labels = labels;
-  memoryChart.data.datasets[0].data = [...memoryHistory];
-  memoryChart.options.scales.y.min = memScaleMin;
-  memoryChart.options.scales.y.max = memScaleMax;
-  memoryChart.options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((memScaleMax - memScaleMin) / 4));
-  memoryChart.update('none');
+  appState.getMonitoring("memoryChart").data.labels = labels;
+  appState.getMonitoring("memoryChart").data.datasets[0].data = [...appState.getMonitoring("memoryHistory")];
+  appState.getMonitoring("memoryChart").options.scales.y.min = memScaleMin;
+  appState.getMonitoring("memoryChart").options.scales.y.max = memScaleMax;
+  appState.getMonitoring("memoryChart").options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((memScaleMax - memScaleMin) / 4));
+  appState.getMonitoring("memoryChart").update('none');
 }
 
 async function updateMonitoringStats() {
@@ -2758,7 +2771,7 @@ async function updateMonitoringStats() {
     memoryHistory.push(stats.memory_percentage);
     
     // Limitar historial
-    if (cpuHistory.length > MAX_HISTORY_POINTS) {
+    if (appState.getMonitoring("cpuHistory").length > MAX_HISTORY_POINTS) {
       cpuHistory.shift();
       memoryHistory.shift();
     }
@@ -2805,19 +2818,20 @@ window.closeMonitoringModal = closeMonitoringModal;
 window.changeChartType = changeChartType;
 
 // ===== TEMPLATES =====
-let selectedTemplateForDb = null;
-let templateSelect = null;
-let versionSelect = null;
+// Removed: selectedTemplateForDb = null; // Now using appState
+// Removed: templateSelect = null; // Now using appState
+// Removed: versionSelect = null; // Now using appState
 
 function loadComposeTab() {
-  if (!composeManager) {
-    composeManager = new DockerCompose(invoke, showNotification, showLoading, hideLoading);
+  if (!appState.getComponent("composeManager")) {
+  const composeManager = new DockerCompose(invoke, showNotification, showLoading, hideLoading);
+    appState.setComponent("composeManager", composeManager);
     window.composeManager = composeManager;
   }
   const content = document.getElementById('compose-tab-content');
   if (content) {
-    content.innerHTML = composeManager.render();
-    composeManager.loadProjects();
+    content.innerHTML = appState.getComponent("composeManager").render();
+    appState.getComponent("composeManager").loadProjects();
   }
 }
 
@@ -2827,7 +2841,7 @@ function loadTemplatesTab() {
 
 function loadTemplateOptions() {
   const templates = getAllTemplates();
-  const dbType = selectedDbType;
+  const dbType = appState.getUI("selectedDbType");
 
   // Filter templates that support current db type
   const availableTemplates = Object.values(templates).filter(
@@ -2844,17 +2858,17 @@ function loadTemplateOptions() {
 
   // Destroy previous instance if exists
   if (templateSelect) {
-    templateSelect.destroy();
+    appState.getComponent("templateSelect").destroy();
   }
 
   // Create new CustomSelect
-  templateSelect = new CustomSelect('db-template-select', {
+  const templateSelect = new CustomSelect('db-template-select', {
     placeholder: 'Default Configuration',
     items: items,
     value: '',
     onChange: (value) => {
-      selectedTemplateForDb = value || null;
-      if (selectedTemplateForDb) {
+  appState.setUI("selectedTemplateForDb", value || null);
+      if (appState.getUI("selectedTemplateForDb")) {
         const template = templates[selectedTemplateForDb];
         showNotification(`Template "${template.name}" selected. Configuration will be applied on creation.`, 'info');
       }

@@ -53,6 +53,7 @@
 - 💤 **Visibility Detection** - Pausa cuando la ventana está oculta
 - 📦 **Virtual Scrolling** - Maneja 100+ contenedores sin lag
 - 🔍 **Structured Logging** - Sistema de logs profesional con niveles y contexto
+- 🏗️ **Centralized State** - Un solo source of truth para todo el estado
 
 ---
 
@@ -200,6 +201,8 @@ docker-db-manager/
 │   ├── lib/                     # Business logic
 │   │   ├── managers/           # State managers
 │   │   ├── services/           # API services
+│   │   ├── state/              # Application state
+│   │   │   └── AppState.js     # Centralized state manager
 │   │   └── utils/              # Utilities
 │   │       ├── cache.js        # Cache system
 │   │       ├── polling.js      # Polling system
@@ -244,6 +247,13 @@ docker-db-manager/
 - Color-coded console output
 - Performance timing
 - Production/Development modes
+
+#### Centralized State Management
+- Single source of truth: `appState`
+- Type-safe state updates
+- State change listeners/observers
+- Dev tools integration
+- No more scattered global variables
 
 See [CACHE_POLLING_IMPLEMENTATION.md](CACHE_POLLING_IMPLEMENTATION.md) for details.
 
@@ -309,6 +319,15 @@ __DEV__.logger.getLogs()
 // Logger - Export logs
 __DEV__.logger.exportLogs()
 
+// State - Get full snapshot
+__DEV__.state.get()
+
+// State - Get stats
+__DEV__.state.stats()
+
+// State - Get specific data
+__DEV__.state.getData('allContainers')
+
 // Clear cache
 __DEV__.cache.clear()
 
@@ -317,8 +336,9 @@ __DEV__.polling.pauseAll()
 __DEV__.polling.resumeAll()
 
 // Virtual scroll info (when enabled)
-if (containersVirtualScroll) {
-  containersVirtualScroll.getScrollInfo()
+const virtualScroll = __DEV__.state.getComponent('containersVirtualScroll')
+if (virtualScroll) {
+  virtualScroll.getScrollInfo()
 }
 ```
 

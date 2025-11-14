@@ -8,6 +8,7 @@
 import { cache } from './utils/cache.js';
 import { polling } from './utils/polling.js';
 import { getStoredLogs, exportLogs, clearStoredLogs, configureLogger } from './utils/logger.js';
+import { appState } from './state/AppState.js';
 
 /**
  * Setup global dev tools
@@ -37,6 +38,24 @@ export function setupDevTools() {
       clearLogs: () => clearStoredLogs(),
       configure: (options) => configureLogger(options),
     },
+    state: {
+      get: () => appState.getSnapshot(),
+      stats: () => appState.getStats(),
+      reset: () => appState.reset(),
+      getData: (key) => appState.getData(key),
+      getUI: (key) => appState.getUI(key),
+      getModal: (key) => appState.getModal(key),
+      subscribe: (path, callback) => appState.subscribe(path, callback),
+      // History
+      undo: () => appState.undo(),
+      redo: () => appState.redo(),
+      historyInfo: () => appState.getHistoryInfo(),
+      enableHistory: () => appState.enableHistory(),
+      disableHistory: () => appState.disableHistory(),
+      // Persistence
+      enablePersistence: (keys) => appState.enablePersistence(keys),
+      disablePersistence: () => appState.disablePersistence(),
+    },
   };
   
   console.log('%c🛠️ Dev Tools Ready', 'color: #10b981; font-size: 14px; font-weight: bold');
@@ -45,4 +64,8 @@ export function setupDevTools() {
   console.log('  __DEV__.cache.stats()');
   console.log('  __DEV__.polling.stats()');
   console.log('  __DEV__.logger.getLogs()');
+  console.log('  __DEV__.state.get()');
+  console.log('  __DEV__.state.undo()');
+  console.log('  __DEV__.state.redo()');
+  console.log('  __DEV__.state.enableHistory()');
 }
