@@ -659,9 +659,82 @@ fn connect_docker() -> Result<Docker, String> {
     Err("No se pudo conectar a Docker. Asegúrate de que Docker Desktop está corriendo.".to_string())
 }
 
+/// Open Docker Desktop application
+/// 
+/// # Returns
+/// * `Ok(String)` - Success message
+/// * `Err(String)` - Error message if opening fails
+#[tauri::command]
+async fn open_docker_desktop() -> Result<String, String> {
+    use std::process::Command;
+    
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("open")
+            .arg("-a")
+            .arg("Docker")
+            .output()
+            .map_err(|e| format!("Failed to open Docker Desktop: {}", e))?;
+        
+        if output.status.success() {
+            Ok("Docker Desktop opened successfully".to_string())
+        } else {
+            Err("Failed to open Docker Desktop. Make sure it's installed.".to_string())
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("cmd")
+            .args(&["/C", "start", "", "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"])
+            .output()
+            .map_err(|e| format!("Failed to open Docker Desktop: {}", e))?;
+        
+        if output.status.success() {
+            Ok("Docker Desktop opened successfully".to_string())
+        } else {
+            Err("Failed to open Docker Desktop. Make sure it's installed.".to_string())
+        }
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        // On Linux, Docker usually runs as a service
+        // Try to start the docker service
+        let output = Command::new("systemctl")
+            .args(&["start", "docker"])
+            .output()
+            .map_err(|e| format!("Failed to start Docker: {}", e))?;
+        
+        if output.status.success() {
+            Ok("Docker service started successfully".to_string())
+        } else {
+            Err("Failed to start Docker service. You may need to start it manually with 'sudo systemctl start docker'".to_string())
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let docker = connect_docker().expect("Docker no disponible. Por favor, inicia Docker Desktop y vuelve a intentar.");
+    // Try to connect to Docker, but don't fail if it's not available
+    let docker = match connect_docker() {
+        Ok(d) => {
+            println!("✅ Docker initialized successfully");
+            d
+        }
+        Err(e) => {
+            println!("⚠️ Docker not available at startup: {}", e);
+            println!("⚠️ The app will start anyway. You can connect to Docker later.");
+            // Create a connection that will fail gracefully
+            Docker::connect_with_local_defaults().unwrap_or_else(|_| {
+                // This should never fail, but if it does, we'll use a dummy connection
+                // that will return errors for all operations
+                Docker::connect_with_socket("/nonexistent.sock", 1, bollard::API_DEFAULT_VERSION)
+                    .expect("Failed to create dummy Docker connection")
+            })
+        }
+    };
+    
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
@@ -670,7 +743,8 @@ pub fn run() {
         .manage(AppState { docker: Mutex::new(docker) })
         .manage(MigrationState { migrated: Mutex::new(Vec::new()) })
         .invoke_handler(tauri::generate_handler![
-            check_docker, 
+            check_docker,
+            open_docker_desktop, 
             get_database_types, 
             list_containers,
             list_images,

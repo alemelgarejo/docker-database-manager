@@ -6,6 +6,21 @@ import { templatesManager } from './components/Templates.js';
 import { getAllTemplates, applyTemplate, saveCustomTemplate } from './templates.js';
 import { CustomSelect } from './components/CustomSelect.js';
 import { DockerCompose } from './components/DockerCompose.js';
+import { cache } from './lib/utils/cache.js';
+import { polling } from './lib/utils/polling.js';
+import { VirtualScroll } from './lib/utils/virtualScroll.js';
+import { createLogger } from './lib/utils/logger.js';
+import { setupDevTools } from './lib/dev-tools.js';
+import { appState } from './lib/state/AppState.js';
+import { TabManager } from './lib/managers/TabManager.js';
+
+// Create loggers for different contexts
+const logger = createLogger('Main');
+const tauriLogger = createLogger('Tauri');
+const updateLogger = createLogger('Updates');
+
+// Create tab manager instance
+const tabManager = new TabManager();
 
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
@@ -19,7 +34,7 @@ function getTauriAPI() {
         const relaunch = window.__TAURI__?.plugin?.process?.relaunch;
 
         if (invoke) {
-          console.log('[Tauri] API loaded successfully');
+          tauriLogger.info('API loaded successfully');
           resolve({ invoke, check, ask, relaunch });
         } else {
           setTimeout(checkTauri, 50);
@@ -32,19 +47,11 @@ function getTauriAPI() {
   });
 }
 
-// Variables globales para la API
+// Backward compatibility getters (deprecated - use appState instead)
 let invoke, check, ask, relaunch;
 
-// Componente de búsqueda y filtros
-let searchFilters = null;
-let imagesSearchFilters = null;
-let migrationSearchFilters = null;
-let composeManager = null;
-let allContainers = []; // Cache de todos los contenedores
-let allImages = []; // Cache de todas las imágenes
-
-console.log('[main.js] v3 loaded - improved Docker connection');
-console.log('[main.js] Waiting for Tauri to be available...');
+logger.info('Application starting...');
+logger.debug('Waiting for Tauri API...');
 
 // Función para verificar actualizaciones
 async function checkForUpdates(silent = true) {
@@ -211,28 +218,394 @@ function showNotification(message, type = 'success') {
   };
 }
 
+/**
+ * Check if Docker is running and available
+ * @returns {Promise<boolean>} True if Docker is connected, false otherwise
+ */
 async function checkDocker() {
   try {
-    await invoke('check_docker');
-    document.getElementById('docker-status').textContent = 'Docker Connected';
-    return true;
-  } catch (_e) {
-    document.getElementById('docker-status').textContent =
-      'Docker Disconnected';
+    const isConnected = await invoke('check_docker');
+    logger.info(`[checkDocker] Docker status: ${isConnected ? 'Connected' : 'Disconnected'}`);
+    
+    if (isConnected) {
+      document.getElementById('docker-status').textContent = 'Docker Connected';
+      return true;
+    } else {
+      document.getElementById('docker-status').textContent = 'Docker Disconnected';
+      return false;
+    }
+  } catch (error) {
+    logger.error('[checkDocker] Error checking Docker:', error);
+    document.getElementById('docker-status').textContent = 'Docker Disconnected';
     return false;
   }
 }
 
-async function loadContainers(applyFilters = false) {
+/**
+ * Show Docker error overlay
+ */
+function showDockerError() {
+  let errorOverlay = document.getElementById('docker-error-overlay');
+  if (!errorOverlay) {
+    errorOverlay = document.createElement('div');
+    errorOverlay.id = 'docker-error-overlay';
+    errorOverlay.className = 'docker-error-overlay';
+    errorOverlay.innerHTML = `
+      <div class="docker-error-content">
+        <div class="docker-error-icon">🐳</div>
+        <h2>Docker Not Running</h2>
+        <p>Docker Desktop is not running or not accessible.</p>
+        <p class="docker-error-subtitle">Please start Docker Desktop to continue.</p>
+        <div class="docker-error-actions">
+          <button class="btn btn-primary" onclick="openDockerDesktop()">
+            ${getIcon('play')} Open Docker Desktop
+          </button>
+          <button class="btn btn-secondary" onclick="retryDockerConnection()">
+            ${getIcon('refresh')} Retry Connection
+          </button>
+        </div>
+        <p class="docker-error-help">
+          <strong>Need help?</strong> Make sure Docker Desktop is installed and running.
+        </p>
+      </div>
+    `;
+    document.body.appendChild(errorOverlay);
+  }
+  errorOverlay.style.display = 'flex';
+}
+
+/**
+ * Hide Docker error overlay
+ */
+function hideDockerError() {
+  const errorOverlay = document.getElementById('docker-error-overlay');
+  if (errorOverlay) {
+    errorOverlay.style.display = 'none';
+  }
+}
+
+/**
+ * Open Docker Desktop application
+ */
+async function openDockerDesktop() {
   try {
-    // Si no se está aplicando filtros, recargar desde la API
-    if (!applyFilters) {
-      allContainers = await invoke('list_containers');
+    showNotification('Attempting to open Docker Desktop...', 'info');
+    await invoke('open_docker_desktop');
+    showNotification('Docker Desktop opened. Waiting for it to start...', 'info');
+    
+    // Wait a bit and retry connection
+    setTimeout(async () => {
+      await retryDockerConnection();
+    }, 5000);
+  } catch (e) {
+    showNotification('Could not open Docker Desktop automatically. Please open it manually.', 'warning');
+    console.error('Error opening Docker Desktop:', e);
+  }
+}
+
+/**
+ * Retry Docker connection
+ */
+async function retryDockerConnection() {
+  showLoading('Checking Docker connection...');
+  
+  try {
+    const connected = await checkDocker();
+    
+    if (connected) {
+      showNotification('Docker connected successfully!', 'success');
+      hideDockerError();
+      
+      // Clear all cache to get fresh data
+      cache.clear();
+      
+      // Reload data
+      await loadDashboardStats();
+      await loadContainers(false, true);
+      
+      // Re-setup polling if it was cleared
+      if (polling.getStats().total === 0) {
+        setupPolling();
+      }
+    } else {
+      showNotification('Docker is still not available. Please start Docker Desktop.', 'warning');
+    }
+  } catch (e) {
+    showNotification('Failed to connect to Docker: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Render a single container card
+ * @param {Object} c - Container object
+ * @param {number} index - Container index
+ * @returns {string} HTML string for container card
+ */
+function renderContainerCard(c, index) {
+  const shortId = c.id.substring(0, 12);
+  const dbTypeName = c.db_type.charAt(0).toUpperCase() + c.db_type.slice(1);
+
+  const dbIconMap = {
+    postgresql: 'postgresql',
+    mysql: 'mysql',
+    mongodb: 'mongodb',
+    redis: 'redis',
+    mariadb: 'mariadb',
+  };
+  const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
+  
+  // Store container data for URL generation
+  window[`containerData_${index}`] = c;
+  
+  return `
+    <div class="db-card" data-db-type="${c.db_type}">
+      <div class="db-card-header">
+        <div class="db-card-icon">${dbIcon}</div>
+        <div class="db-card-info">
+          <h3 class="db-card-title">${c.name}</h3>
+          <span class="db-card-meta">${dbTypeName} ${c.database_name}</span>
+        </div>
+        <span class="db-status db-status-${c.status}">${c.status}</span>
+      </div>
+      
+      <div class="db-card-data">
+        <div class="db-data-item" onclick="copyToClipboard('${c.port}', 'Port copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Port</span>
+          <span class="db-data-value">${c.port}</span>
+        </div>
+        <div class="db-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Container ID</span>
+          <span class="db-data-value">${shortId}</span>
+        </div>
+        <div class="db-data-item" onclick="copyToClipboard('${c.created}', 'Date copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Created</span>
+          <span class="db-data-value">${c.created}</span>
+        </div>
+        <div class="db-data-item" onclick="copyToClipboard('localhost:${c.port}', 'Connection copied!')" data-tooltip="Click to copy">
+          <span class="db-data-label">Connection</span>
+          <span class="db-data-value">localhost:${c.port}</span>
+        </div>
+      </div>
+      
+      <div class="db-card-actions">
+        <button class="db-action-btn db-btn-copy-url" onclick="copyConnectionURL(window.containerData_${index})" data-tooltip="Copy connection URL">
+          ${getIcon('link')}
+        </button>
+        ${
+          c.status === 'running'
+            ? `
+          <button class="db-action-btn db-btn-monitor" onclick="openMonitoringModal('${c.id}', '${c.name}')" data-tooltip="Monitor resources">
+            ${getIcon('chartBar')}
+          </button>
+          <button class="db-action-btn db-btn-stop" onclick="stopC('${c.id}')" data-tooltip="Stop container">
+            ${getIcon('pause')}
+          </button>
+          <button class="db-action-btn db-btn-logs" onclick="showLogs('${c.id}')" data-tooltip="View logs">
+            ${getIcon('fileText')}
+          </button>
+          ${
+            c.db_type === 'postgresql' ||
+            c.db_type === 'mysql' ||
+            c.db_type === 'mariadb'
+              ? `
+            <button class="db-action-btn db-btn-sql" onclick="showSQL('${c.id}','${c.database_name}')" data-tooltip="Open SQL console">
+              ${getIcon('terminal')}
+            </button>
+          `
+              : ''
+          }
+          <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
+            ${getIcon('rotateCw')}
+          </button>
+        `
+            : `
+          <button class="db-action-btn db-btn-start" onclick="startC('${c.id}')" data-tooltip="Start container">
+            ${getIcon('play')}
+          </button>
+          <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
+            ${getIcon('rotateCw')}
+          </button>
+        `
+        }
+        <button 
+          class="db-action-btn db-btn-edit" 
+          data-container-id="${c.id}" 
+          data-container-name="${c.name.replace(/"/g, '&quot;')}" 
+          onclick="openRenameModalFromButton(this)" 
+          data-tooltip="Rename container"
+        >
+          ${getIcon('edit')}
+        </button>
+        <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name.replace(/'/g, "\\'")}' )" data-tooltip="Delete container">
+          ${getIcon('trash')}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render containers from appState without fetching
+ * Used by observers to update UI when state changes
+ */
+function renderContainers() {
+  const allContainers = appState.getData('allContainers');
+  if (!allContainers || allContainers.length === 0) return;
+  
+  const list = document.getElementById('containers-list');
+  const noData = document.getElementById('no-containers');
+  const resultsCount = document.getElementById('results-count');
+  const searchFilters = appState.getComponent('searchFilters');
+
+  // Apply filters if component exists
+  let containers = allContainers;
+  if (searchFilters) {
+    containers = searchFilters.applyFilters(allContainers);
+  }
+
+  if (!containers.length) {
+    list.innerHTML = '';
+    noData.style.display = 'block';
+    if (resultsCount) {
+      resultsCount.textContent = allContainers.length > 0 ? 'No results found' : '';
+    }
+    return;
+  }
+
+  noData.style.display = 'none';
+  
+  // Update results count
+  if (resultsCount) {
+    if (searchFilters && searchFilters.getActiveFiltersCount() > 0) {
+      resultsCount.innerHTML = `
+        Showing <strong>${containers.length}</strong> of <strong>${allContainers.length}</strong> databases
+        <span class="filter-badge">${searchFilters.getActiveFiltersCount()} active filters</span>
+      `;
+    } else {
+      resultsCount.textContent = `Showing ${containers.length} databases`;
+    }
+  }
+
+  // Simple render without virtual scroll (observer updates should be lightweight)
+  list.innerHTML = containers.map((c, i) => renderContainerCard(c, i)).join('');
+}
+
+/**
+ * Render images from appState without fetching
+ * Used by observers to update UI when state changes
+ */
+function renderImages() {
+  const allImages = appState.getData('allImages');
+  if (!allImages || allImages.length === 0) return;
+  
+  const list = document.getElementById('images-list');
+  const noData = document.getElementById('no-images');
+  const resultsCount = document.getElementById('results-count-images');
+  const imagesSearchFilters = appState.getComponent('imagesSearchFilters');
+
+  // Apply filters if component exists
+  let images = allImages;
+  if (imagesSearchFilters) {
+    images = imagesSearchFilters.applyFilters(allImages);
+  }
+
+  if (!images.length) {
+    list.innerHTML = '';
+    noData.style.display = 'block';
+    if (resultsCount) {
+      resultsCount.textContent = allImages.length > 0 ? 'No results found' : '';
+    }
+    return;
+  }
+
+  noData.style.display = 'none';
+  
+  // Update results count
+  if (resultsCount) {
+    if (imagesSearchFilters && imagesSearchFilters.getActiveFiltersCount() > 0) {
+      resultsCount.innerHTML = `
+        Showing <strong>${images.length}</strong> of <strong>${allImages.length}</strong> images
+        <span class="filter-badge">${imagesSearchFilters.getActiveFiltersCount()} active filters</span>
+      `;
+    } else {
+      resultsCount.textContent = `Showing ${images.length} images`;
+    }
+  }
+
+  // Render images
+  list.innerHTML = images.map((img) => {
+    const mainTag = img.tags[0] || 'unknown';
+    const shortId = img.id.substring(7, 19); // Quitar sha256:
+
+    return `
+      <div class="image-card">
+        <div class="image-header">
+          <div class="image-icon">${getIcon('package')}</div>
+          <div class="image-info">
+            <h3 class="image-title">${mainTag}</h3>
+            <span class="image-meta">${img.size} • ${img.created}</span>
+          </div>
+        </div>
+        
+        <div class="image-data">
+          <div class="image-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
+            <span class="image-data-label">ID</span>
+            <span class="image-data-value">${shortId}</span>
+          </div>
+          ${
+            img.tags.length > 1
+              ? `
+          <div class="image-data-item">
+            <span class="image-data-label">Tags</span>
+            <span class="image-data-value">${img.tags.length} tags</span>
+          </div>
+          `
+              : ''
+          }
+        </div>
+        
+        <div class="image-actions">
+          <button class="btn btn-danger btn-sm" onclick="confirmRemoveImage('${img.id}', '${mainTag}')" data-tooltip="Delete image">
+            ${getIcon('trash')}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Load containers with intelligent caching and virtual scrolling
+ * @param {boolean} applyFilters - If true, use cached data with filters
+ * @param {boolean} forceRefresh - If true, bypass cache and fetch fresh data
+ */
+async function loadContainers(applyFilters = false, forceRefresh = false) {
+  try {
+    // If not applying filters or force refresh, fetch from API with cache
+    if (!applyFilters || forceRefresh) {
+      if (forceRefresh) {
+        cache.invalidate('containers');
+      }
+      
+      const containers = await cache.get(
+        'containers',
+        () => invoke('list_containers'),
+        30000 // 30 second TTL
+      );
+      
+      // Update state
+      appState.setData('allContainers', containers);
     }
     
     const list = document.getElementById('containers-list');
     const noData = document.getElementById('no-containers');
     const resultsCount = document.getElementById('results-count');
+
+    // Get data from state
+    const allContainers = appState.getData('allContainers');
+    const searchFilters = appState.getComponent('searchFilters');
 
     // Aplicar filtros si el componente existe
     let containers = allContainers;
@@ -241,6 +614,13 @@ async function loadContainers(applyFilters = false) {
     }
 
     if (!containers.length) {
+      // Destroy virtual scroll if exists
+      const virtualScroll = appState.getComponent('containersVirtualScroll');
+      if (virtualScroll) {
+        virtualScroll.destroy();
+        appState.setComponent('containersVirtualScroll', null);
+      }
+      
       list.innerHTML = '';
       noData.style.display = 'block';
       if (resultsCount) {
@@ -265,111 +645,51 @@ async function loadContainers(applyFilters = false) {
       }
     }
 
-    list.innerHTML = containers
-      .map((c, index) => {
-        const shortId = c.id.substring(0, 12);
-        const dbTypeName =
-          c.db_type.charAt(0).toUpperCase() + c.db_type.slice(1);
-
-        const dbIconMap = {
-          postgresql: 'postgresql',
-          mysql: 'mysql',
-          mongodb: 'mongodb',
-          redis: 'redis',
-          mariadb: 'mariadb',
-        };
-        const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
+    // Use virtual scrolling for large lists (>50 items)
+    const VIRTUAL_SCROLL_THRESHOLD = 50;
+    
+    if (containers.length > VIRTUAL_SCROLL_THRESHOLD) {
+      // Initialize or update virtual scroll
+      let virtualScroll = appState.getComponent('containersVirtualScroll');
+      
+      if (!virtualScroll) {
+        // Find the scroll container (main-content or containers-section)
+        const scrollContainer = document.querySelector('.main-content') || 
+                               list.closest('.containers-section') || 
+                               list.parentElement;
         
-        // Store container data for URL generation
-        window[`containerData_${index}`] = c;
+        // Mark list as using virtual scrolling
+        list.classList.add('virtual-scrolling');
+        list.classList.remove('containers-grid');
         
-        return `
-      <div class="db-card" data-db-type="${c.db_type}">
-        <div class="db-card-header">
-          <div class="db-card-icon">${dbIcon}</div>
-          <div class="db-card-info">
-            <h3 class="db-card-title">${c.name}</h3>
-            <span class="db-card-meta">${dbTypeName} ${c.database_name}</span>
-          </div>
-          <span class="db-status db-status-${c.status}">${c.status}</span>
-        </div>
+        virtualScroll = new VirtualScroll({
+          container: list,
+          scrollContainer: scrollContainer,
+          items: containers,
+          renderItem: renderContainerCard,
+          itemHeight: 180, // Estimated height of db-card
+          buffer: 3
+        });
         
-        <div class="db-card-data">
-          <div class="db-data-item" onclick="copyToClipboard('${c.port}', 'Port copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Port</span>
-            <span class="db-data-value">${c.port}</span>
-          </div>
-          <div class="db-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Container ID</span>
-            <span class="db-data-value">${shortId}</span>
-          </div>
-          <div class="db-data-item" onclick="copyToClipboard('${c.created}', 'Date copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Created</span>
-            <span class="db-data-value">${c.created}</span>
-          </div>
-          <div class="db-data-item" onclick="copyToClipboard('localhost:${c.port}', 'Connection copied!')" data-tooltip="Click to copy">
-            <span class="db-data-label">Connection</span>
-            <span class="db-data-value">localhost:${c.port}</span>
-          </div>
-        </div>
-        
-        <div class="db-card-actions">
-          <button class="db-action-btn db-btn-copy-url" onclick="copyConnectionURL(window.containerData_${index})" data-tooltip="Copy connection URL">
-            ${getIcon('link')}
-          </button>
-          ${
-            c.status === 'running'
-              ? `
-            <button class="db-action-btn db-btn-monitor" onclick="openMonitoringModal('${c.id}', '${c.name}')" data-tooltip="Monitor resources">
-              ${getIcon('chartBar')}
-            </button>
-            <button class="db-action-btn db-btn-stop" onclick="stopC('${c.id}')" data-tooltip="Stop container">
-              ${getIcon('pause')}
-            </button>
-            <button class="db-action-btn db-btn-logs" onclick="showLogs('${c.id}')" data-tooltip="View logs">
-              ${getIcon('fileText')}
-            </button>
-            ${
-              c.db_type === 'postgresql' ||
-              c.db_type === 'mysql' ||
-              c.db_type === 'mariadb'
-                ? `
-              <button class="db-action-btn db-btn-sql" onclick="showSQL('${c.id}','${c.database_name}')" data-tooltip="Open SQL console">
-                ${getIcon('terminal')}
-              </button>
-            `
-                : ''
-            }
-            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
-              ${getIcon('rotateCw')}
-            </button>
-          `
-              : `
-            <button class="db-action-btn db-btn-start" onclick="startC('${c.id}')" data-tooltip="Start container">
-              ${getIcon('play')}
-            </button>
-            <button class="db-action-btn db-btn-restart" onclick="restartC('${c.id}')" data-tooltip="Restart container">
-              ${getIcon('rotateCw')}
-            </button>
-          `
-          }
-          <button 
-            class="db-action-btn db-btn-edit" 
-            data-container-id="${c.id}" 
-            data-container-name="${c.name.replace(/"/g, '&quot;')}" 
-            onclick="openRenameModalFromButton(this)" 
-            data-tooltip="Rename container"
-          >
-            ${getIcon('edit')}
-          </button>
-          <button class="db-action-btn db-btn-delete" onclick="confirmRemove('${c.id}', '${c.name.replace(/'/g, "\\'")}' )" data-tooltip="Delete container">
-            ${getIcon('trash')}
-          </button>
-        </div>
-      </div>
-    `;
-      })
-      .join('');
+        appState.setComponent('containersVirtualScroll', virtualScroll);
+      } else {
+        virtualScroll.setItems(containers);
+      }
+    } else {
+      // For small lists, use traditional rendering
+      const virtualScroll = appState.getComponent('containersVirtualScroll');
+      
+      if (virtualScroll) {
+        virtualScroll.destroy();
+        appState.setComponent('containersVirtualScroll', null);
+        list.classList.remove('virtual-scrolling');
+        list.classList.add('containers-grid');
+      }
+      
+      list.innerHTML = containers
+        .map((c, index) => renderContainerCard(c, index))
+        .join('');
+    }
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   }
@@ -378,7 +698,8 @@ async function loadContainers(applyFilters = false) {
 // ===== SEARCH & FILTERS =====
 function initializeSearchFilters() {
   // Crear instancia del componente para databases
-  searchFilters = new SearchFilters('databases');
+  const searchFilters = new SearchFilters('databases');
+  appState.setComponent('searchFilters', searchFilters);
   
   // Renderizar el componente en el DOM
   const searchContainer = document.getElementById('search-filters');
@@ -395,18 +716,19 @@ function initializeSearchFilters() {
 
 function initializeImagesSearchFilters() {
   // Crear instancia del componente para images
-  imagesSearchFilters = new SearchFilters('images');
+  const imagesSearchFilters = new SearchFilters('images');
+  appState.setComponent("imagesSearchFilters", imagesSearchFilters);
   console.log('[initializeImagesSearchFilters] Component created');
   
   // Renderizar el componente en el DOM
   const searchContainer = document.getElementById('search-filters-images');
   if (searchContainer) {
-    searchContainer.innerHTML = imagesSearchFilters.render();
-    imagesSearchFilters.attachEventListeners();
+    searchContainer.innerHTML = appState.getComponent("imagesSearchFilters").render();
+    appState.getComponent("imagesSearchFilters").attachEventListeners();
     console.log('[initializeImagesSearchFilters] Component rendered and attached');
     
     // Suscribirse a cambios de filtros
-    imagesSearchFilters.onChange(() => {
+    appState.getComponent("imagesSearchFilters").onChange(() => {
       console.log('[imagesSearchFilters] Filter changed, reloading...');
       loadImages(true); // true = aplicar filtros sin recargar desde API
     });
@@ -437,13 +759,17 @@ function initializeMigrationSearchFilters() {
   }
 }
 
-// ===== DASHBOARD =====
+/**
+ * Load dashboard statistics with caching
+ */
 async function loadDashboardStats() {
   try {
     console.log('Loading dashboard stats...');
+    
+    // Use cache for containers and images
     const [containers, images] = await Promise.all([
-      invoke('list_containers'),
-      invoke('list_images')
+      cache.get('containers', () => invoke('list_containers'), 30000),
+      cache.get('images', () => invoke('list_images'), 60000)
     ]);
     
     console.log('Containers loaded:', containers.length);
@@ -553,7 +879,10 @@ function loadRecentContainers(containers) {
 async function createDB(e) {
   e.preventDefault();
 
-  if (!selectedDbType) {
+  const selectedDbType = appState.getUI('selectedDbType');
+  const selectedTemplateForDb = appState.getUI('selectedTemplateForDb');
+  
+  if (!appState.getUI("selectedDbType")) {
     showNotification('Please select a database type', 'error');
     return;
   }
@@ -571,17 +900,17 @@ async function createDB(e) {
       username: document.getElementById('db-username').value || '',
       password: document.getElementById('db-password').value || '',
       port: parseInt(document.getElementById('db-port').value, 10),
-      version: versionSelect ? versionSelect.getValue() : '',
-      type: selectedDbType,
+      version: appState.getComponent('versionSelect') ? appState.getComponent('versionSelect').getValue() : '',
+      type: appState.getUI("selectedDbType"),
     };
 
     // Apply template if selected
-    if (selectedTemplateForDb) {
-      console.log('[TEMPLATE] Applying template:', selectedTemplateForDb);
-      console.log('[TEMPLATE] DB Type:', selectedDbType);
+    if (appState.getUI("selectedTemplateForDb")) {
+      console.log('[TEMPLATE] Applying template:', appState.getUI("selectedTemplateForDb"));
+      console.log('[TEMPLATE] DB Type:', appState.getUI("selectedDbType"));
       console.log('[TEMPLATE] Base config before:', config);
       
-      const templateConfig = applyTemplate(selectedTemplateForDb, selectedDbType, config);
+      const templateConfig = applyTemplate(appState.getUI("selectedTemplateForDb"), appState.getUI("selectedDbType"), config);
       config = { ...config, ...templateConfig };
       
       console.log('[TEMPLATE] Applied template configuration:', templateConfig);
@@ -602,8 +931,13 @@ async function createDB(e) {
 
     showNotification('Database created successfully', 'success');
     selectedTemplateForDb = null; // Reset template selection
+    
+    // Invalidate cache to show new database
+    cache.invalidate('containers');
+    cache.invalidate('images');
+    
     window.closeCreateModal();
-    await loadContainers();
+    await loadContainers(false, true);
     await loadDashboardStats(); // Actualizar dashboard también
   } catch (e) {
     console.error('Error creating database:', e);
@@ -619,7 +953,10 @@ async function startC(id) {
   try {
     await invoke('start_container', { containerId: id });
     showNotification('Container started', 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -633,7 +970,10 @@ async function stopC(id) {
   try {
     await invoke('stop_container', { containerId: id });
     showNotification('Container stopped', 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -647,7 +987,10 @@ async function restartC(id) {
   try {
     await invoke('restart_container', { containerId: id });
     showNotification('Container restarted', 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -795,7 +1138,11 @@ async function executeRemove(id) {
       removeVolumes: Boolean(removeVolumes),
     });
     showNotification(result, 'success');
-    await loadContainers();
+    
+    // Invalidate all related cache
+    cache.invalidate('containers');
+    cache.invalidate('volumes');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     showNotification('Error: ' + e, 'error');
@@ -838,7 +1185,7 @@ async function showLogs(id) {
 }
 
 // Variables globales para el modal de rename
-let currentRenameContainerId = null;
+// Removed: currentRenameContainerId = null; // Now using appState
 
 function openRenameModalFromButton(button) {
   const containerId = button.getAttribute('data-container-id');
@@ -849,7 +1196,7 @@ function openRenameModalFromButton(button) {
 
 function openRenameModal(containerId, currentName) {
   console.log('[openRenameModal]', { containerId, currentName });
-  currentRenameContainerId = containerId;
+  appState.setModal("currentRenameContainerId", containerId);
   document.getElementById('rename-current-name').textContent = currentName;
   document.getElementById('rename-new-name').value = currentName;
   document.getElementById('rename-modal').classList.add('active');
@@ -862,7 +1209,7 @@ function openRenameModal(containerId, currentName) {
 function closeRenameModal() {
   document.getElementById('rename-modal').classList.remove('active');
   document.getElementById('rename-form').reset();
-  currentRenameContainerId = null;
+  appState.setModal("currentRenameContainerId", null);
 }
 
 async function executeRename(e) {
@@ -871,7 +1218,7 @@ async function executeRename(e) {
   
   console.log('[executeRename] Starting...', {
     newName,
-    currentRenameContainerId,
+    containerId: appState.getModal("currentRenameContainerId"),
   });
   
   if (!newName) {
@@ -879,14 +1226,14 @@ async function executeRename(e) {
     return;
   }
 
-  if (!currentRenameContainerId) {
+  if (!appState.getModal("currentRenameContainerId")) {
     console.error('[executeRename] currentRenameContainerId is null or undefined!');
     showNotification('No container selected', 'error');
     return;
   }
 
   // ¡GUARDAR EL ID EN UNA VARIABLE LOCAL ANTES DE CERRAR EL MODAL!
-  const containerIdToRename = currentRenameContainerId;
+  const containerIdToRename = appState.getModal("currentRenameContainerId");
   
   closeRenameModal();
   showLoading('Renaming container...');
@@ -904,7 +1251,10 @@ async function executeRename(e) {
     
     console.log('[executeRename] Success:', result);
     showNotification(result, 'success');
-    await loadContainers();
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
     await loadDashboardStats();
   } catch (e) {
     console.error('[executeRename] Error:', e);
@@ -914,9 +1264,9 @@ async function executeRename(e) {
   }
 }
 
-let currentSQL = null;
+// Removed: currentSQL = null; // Now using appState
 function showSQL(id, db) {
-  currentSQL = { id, db };
+  appState.setModal("currentSQL", { id, db });
   document.getElementById('sql-modal').classList.add('active');
 }
 
@@ -928,8 +1278,8 @@ async function execSQL(e) {
   output.textContent = 'Ejecutando...';
   try {
     const result = await invoke('exec_sql', {
-      containerId: currentSQL.id,
-      database: currentSQL.db,
+      containerId: appState.getModal("currentSQL").id,
+      database: appState.getModal("currentSQL").db,
       username: 'postgres',
       sql: sql,
     });
@@ -940,14 +1290,14 @@ async function execSQL(e) {
 }
 
 // Variables globales para el modal de creación
-let selectedDbType = null;
-let databaseTypes = [];
+// Database types - now in appState.data.databaseTypes
 
 // Cargar tipos de bases de datos
 async function loadDatabaseTypes() {
   try {
-    databaseTypes = await invoke('get_database_types');
-    console.log('Database types loaded:', databaseTypes);
+    const types = await invoke('get_database_types');
+    appState.setData('databaseTypes', types);
+    console.log('Database types loaded:', types);
   } catch (e) {
     console.error('Error loading database types:', e);
     showNotification('Error cargando tipos de BD: ' + e, 'error');
@@ -989,7 +1339,7 @@ function showStep2() {
   document.getElementById('step-1').style.display = 'none';
   document.getElementById('step-2').style.display = 'block';
 
-  const dbType = databaseTypes.find((t) => t.id === selectedDbType);
+  const dbType = databaseTypes.find((t) => t.id === appState.getUI("selectedDbType"));
   if (!dbType) return;
 
   // Actualizar encabezado
@@ -1000,7 +1350,7 @@ function showStep2() {
   // Añadir data attribute al contenedor seleccionado
   const selectedDbTypeDiv = document.querySelector('.selected-db-type');
   if (selectedDbTypeDiv) {
-    selectedDbTypeDiv.setAttribute('data-db-type', selectedDbType);
+    selectedDbTypeDiv.setAttribute('data-db-type', appState.getUI('selectedDbType'));
   }
 
   // Inyectar icono en botón back
@@ -1017,12 +1367,12 @@ function showStep2() {
   const usernameGroup = document.getElementById('username-group');
   const passwordGroup = document.getElementById('password-group');
 
-  if (selectedDbType === 'redis') {
+  if (appState.getUI('selectedDbType') === 'redis') {
     // Redis no requiere usuario, contraseña es opcional
     usernameGroup.style.display = 'none';
     passwordGroup.querySelector('input').required = false;
     passwordGroup.querySelector('label').textContent = 'Contraseña (opcional):';
-  } else if (selectedDbType === 'mongodb') {
+  } else if (appState.getUI('selectedDbType') === 'mongodb') {
     // MongoDB puede funcionar sin autenticación
     usernameGroup.style.display = 'block';
     passwordGroup.style.display = 'block';
@@ -1047,28 +1397,29 @@ function showStep2() {
   }));
 
   // Destroy previous instance if exists
-  if (versionSelect) {
-    versionSelect.destroy();
+  if (appState.getComponent("versionSelect")) {
+    appState.getComponent("versionSelect").destroy();
   }
 
   // Create new CustomSelect for versions
-  versionSelect = new CustomSelect('db-version-select', {
+  const versionSelect = new CustomSelect('db-version-select', {
     placeholder: 'Select version',
     items: versionItems,
     value: versionItems[0]?.value || '',
     required: true
   });
+  appState.setComponent("versionSelect", versionSelect);
 }
 
 // Seleccionar tipo de base de datos
 window.selectDatabaseType = (typeId) => {
-  selectedDbType = typeId;
+  appState.setUI("selectedDbType", typeId);
   showStep2();
 };
 
 // Volver al paso 1
 window.goBackToStep1 = () => {
-  selectedDbType = null;
+  appState.setUI("selectedDbType", null);
   showStep1();
   document.getElementById('create-form').reset();
 };
@@ -1090,9 +1441,13 @@ window.openCreateModal = () => {
 window.closeCreateModal = () => {
   document.getElementById('create-modal').classList.remove('active');
   document.getElementById('create-form').reset();
-  selectedDbType = null;
+  appState.setUI("selectedDbType", null);
   showStep1();
 };
+
+// Expose Docker management functions
+window.openDockerDesktop = openDockerDesktop;
+window.retryDockerConnection = retryDockerConnection;
 
 window.closeLogsModal = () =>
   document.getElementById('logs-modal').classList.remove('active');
@@ -1123,6 +1478,148 @@ window.changeLanguage = (lang) => {
   );
   // TODO: Implementar i18n completo
 };
+
+/**
+ * Setup intelligent polling system
+ */
+function setupPolling() {
+  console.log('[Setup] Initializing intelligent polling...');
+  
+  // Register polling tasks
+  
+  // Task 1: Update containers when on databases tab
+  polling.register(
+    'containers',
+    async () => {
+      try {
+        if (await checkDocker()) {
+          cache.invalidate('containers');
+          await loadContainers(false, true);
+        }
+      } catch (e) {
+        console.error('[Polling] Error updating containers:', e);
+      }
+    },
+    30000, // 30 seconds
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: 'databases'
+    }
+  );
+  
+  // Task 2: Update dashboard stats when on dashboard tab
+  polling.register(
+    'dashboard',
+    async () => {
+      try {
+        if (await checkDocker()) {
+          // Only invalidate, don't force refresh (use cache if valid)
+          await loadDashboardStats();
+        }
+      } catch (e) {
+        console.error('[Polling] Error updating dashboard:', e);
+      }
+    },
+    30000, // 30 seconds
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: 'dashboard'
+    }
+  );
+  
+  // Task 3: Update images when on images tab (less frequently)
+  polling.register(
+    'images',
+    async () => {
+      try {
+        if (await checkDocker()) {
+          cache.invalidate('images');
+          await loadImages(false, true);
+        }
+      } catch (e) {
+        console.error('[Polling] Error updating images:', e);
+      }
+    },
+    60000, // 60 seconds (images change less frequently)
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: 'images'
+    }
+  );
+  
+  // Task 4: Check Docker connection health
+  polling.register(
+    'docker-health',
+    async () => {
+      try {
+        await checkDocker();
+      } catch (e) {
+        console.error('[Polling] Docker health check failed:', e);
+      }
+    },
+    60000, // 60 seconds
+    {
+      immediate: false,
+      onlyWhenVisible: true,
+      tab: null // Run on all tabs
+    }
+  );
+  
+  console.log('[Setup] Polling initialized:', polling.getStats());
+}
+
+/**
+ * Cleanup polling on page unload
+ */
+window.addEventListener('beforeunload', () => {
+  polling.clear();
+  cache.clear();
+});
+
+// Development tools - only available in dev mode
+if (window.location.hostname === 'localhost' || window.location.hostname === 'tauri.localhost') {
+  window.__DEV__ = {
+    cache: {
+      stats: () => {
+        const stats = cache.getStats();
+        console.table(stats.entries);
+        return stats;
+      },
+      clear: () => cache.clear(),
+      invalidate: (key) => cache.invalidate(key),
+      get: (key) => {
+        const cached = cache.cache.get(key);
+        return cached ? cached.data : null;
+      }
+    },
+    polling: {
+      stats: () => {
+        const stats = polling.getStats();
+        console.table(stats.tasks);
+        return stats;
+      },
+      pause: (key) => polling.pause(key),
+      resume: (key) => polling.resume(key),
+      pauseAll: () => polling.pauseAll(),
+      resumeAll: () => polling.resumeAll(),
+    },
+    state: {
+      containers: () => appState.getData('allContainers') || [],
+      images: () => appState.getData('allImages') || [],
+      volumes: () => appState.getData('allVolumes') || [],
+      networks: () => appState.getData('allNetworks') || [],
+      get: (key) => appState.getData(key),
+      set: (key, value) => appState.setData(key, value),
+      getAll: () => appState.getAllData(),
+    }
+  };
+  
+  console.log('%c[DEV] Development tools available at window.__DEV__', 'color: #10b981; font-weight: bold');
+  console.log('%cTry: __DEV__.cache.stats() or __DEV__.polling.stats()', 'color: #94a3b8');
+}
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -1173,6 +1670,21 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
+    // Enable AppState features
+    logger.info('[AppState] Enabling persistence and history...');
+    
+    // Enable state persistence for specific keys
+    appState.enablePersistence([
+      'ui.currentChartType',
+      'ui.selectedDbType',
+      // Don't persist runtime data like containers/images
+    ]);
+    
+    // Enable state history (undo/redo)
+    appState.enableHistory();
+    
+    logger.info('[AppState] Features enabled', appState.getStats());
+
     // Cargar tipos de bases de datos
     await loadDatabaseTypes();
 
@@ -1184,51 +1696,43 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Event listeners
     document.getElementById('new-db-btn').onclick = openCreateModal;
     document.getElementById('refresh-btn').onclick = async () => {
-      await loadContainers();
+      cache.invalidatePattern('.*'); // Invalidate all cache
+      await loadContainers(false, true);
       await loadDashboardStats();
     };
     document.getElementById('create-form').onsubmit = createDB;
     document.getElementById('sql-form').onsubmit = execSQL;
 
-    // Verificar Docker y cargar contenedores (NO BLOQUEAR LA UI)
-    checkDocker()
-      .then(async (connected) => {
-        if (connected) {
-          console.log('✅ Docker connected, loading data...');
-          // Cargar dashboard primero ya que es la tab activa por defecto
-          await loadDashboardStats();
-          // Luego cargar containers para la tab databases
-          await loadContainers();
-          document.getElementById('docker-status').textContent =
-            'Docker connected';
-          console.log('✅ Initial data loaded');
-        } else {
-          console.error('❌ No se pudo conectar con Docker');
-          document.getElementById('docker-status').textContent =
-            '❌ Docker no conectado';
-        }
-      })
-      .catch((error) => {
-        console.error('❌ Error al verificar Docker:', error);
-        document.getElementById('docker-status').textContent =
-          '❌ Docker no conectado';
-      });
-
-    // Actualizar cada 10 segundos
-    setInterval(async () => {
-      try {
-        if (await checkDocker()) {
-          await loadContainers();
-          // Actualizar dashboard si está activo
-          const dashboardTab = document.getElementById('tab-dashboard');
-          if (dashboardTab?.classList.contains('active')) {
-            loadDashboardStats();
-          }
-        }
-      } catch (e) {
-        console.error('Error en actualización periódica:', e);
-      }
-    }, 10000);
+    // Initialize tabs first (before checking Docker)
+    initializeTabs();
+    logger.info('[App] Tabs initialized');
+    
+    // Setup state observers
+    setupStateObservers();
+    logger.info('[App] State observers configured');
+    
+    // Verificar Docker y cargar contenedores
+    const dockerConnected = await checkDocker();
+    
+    if (dockerConnected) {
+      logger.info('[App] Docker connected, loading initial data...');
+      hideDockerError(); // Ensure overlay is hidden
+      
+      // Cargar dashboard primero ya que es la tab activa por defecto
+      await loadDashboardStats();
+      
+      // Luego cargar containers para la tab databases
+      await loadContainers(false, true);
+      
+      logger.info('[App] Initial data loaded');
+      
+      // Setup intelligent polling
+      setupPolling();
+      logger.info('[App] Polling system started');
+    } else {
+      logger.warn('[App] Docker not connected on startup');
+      showDockerError(); // Show overlay only if really not connected
+    }
 
     // Verificar actualizaciones después de 3 segundos
     setTimeout(() => checkForUpdates(true), 3000);
@@ -1256,43 +1760,164 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ===== TAB SYSTEM =====
-window.switchTab = (tabName) => {
+// ===== TAB SYSTEM WITH LAZY LOADING =====
+
+/**
+ * Initialize all tabs with their lazy loaders
+ */
+function initializeTabs() {
+  logger.info('[initializeTabs] Registering tab loaders...');
+  
+  // Dashboard - load immediately (first view)
+  tabManager.registerTab('dashboard', async () => {
+    logger.info('[Tab] Loading dashboard...');
+    await loadDashboardStats();
+  }, true);
+
+  // Databases - lazy load
+  tabManager.registerTab('databases', async () => {
+    logger.info('[Tab] Loading databases...');
+    await loadContainers();
+  });
+
+  // Images - lazy load
+  tabManager.registerTab('images', async () => {
+    logger.info('[Tab] Loading images...');
+    await loadImages();
+  });
+
+  // Migration - lazy load
+  tabManager.registerTab('migration', async () => {
+    logger.info('[Tab] Loading migration...');
+    await checkLocalPostgres();
+    await loadMigratedDatabases();
+  });
+
+  // Volumes - lazy load
+  tabManager.registerTab('volumes', async () => {
+    logger.info('[Tab] Loading volumes...');
+    await loadVolumes();
+  });
+
+  // Compose - lazy load
+  tabManager.registerTab('compose', async () => {
+    logger.info('[Tab] Loading compose...');
+    loadComposeTab();
+  });
+
+  // Templates - lazy load
+  tabManager.registerTab('templates', async () => {
+    logger.info('[Tab] Loading templates...');
+    loadTemplatesTab();
+  });
+  
+  logger.info('[initializeTabs] Tabs registered. Loaded:', tabManager.getLoadedCount());
+}
+
+/**
+ * Setup state observers to react to data changes
+ */
+function setupStateObservers() {
+  logger.info('[State] Setting up observers...');
+  
+  // Observer for containers data changes
+  appState.subscribe('data.allContainers', (containers) => {
+    logger.debug('[Observer] Containers changed', { count: containers?.length || 0 });
+    
+    // Auto-update databases tab if it's active and visible
+    const currentTab = tabManager.getCurrentTab();
+    if (currentTab === 'databases' && document.getElementById('tab-databases')?.style.display !== 'none') {
+      renderContainers();
+    }
+    
+    // Update dashboard stats if visible
+    if (currentTab === 'dashboard' || document.getElementById('tab-dashboard')?.style.display !== 'none') {
+      updateDashboardContainersCount(containers?.length || 0);
+    }
+  });
+  
+  // Observer for images data changes
+  appState.subscribe('data.allImages', (images) => {
+    logger.debug('[Observer] Images changed', { count: images?.length || 0 });
+    
+    // Auto-update images tab if it's active
+    const currentTab = tabManager.getCurrentTab();
+    if (currentTab === 'images' && document.getElementById('tab-images')?.style.display !== 'none') {
+      renderImages();
+    }
+  });
+  
+  // Observer for UI changes
+  appState.subscribe('ui.currentChartType', (chartType) => {
+    logger.debug('[Observer] Chart type changed', { chartType });
+  });
+  
+  // Observer for tab changes (via TabManager)
+  tabManager.onChange((tabName) => {
+    logger.debug('[Observer] Tab changed', { tab: tabName });
+    appState.setUI('activeTab', tabName);
+  });
+  
+  logger.info('[State] Observers configured');
+}
+
+/**
+ * Update dashboard containers count
+ * @param {number} count - Number of containers
+ */
+function updateDashboardContainersCount(count) {
+  const elem = document.getElementById('total-containers');
+  if (elem) {
+    elem.textContent = count;
+  }
+}
+
+/**
+ * Switch between tabs with lazy loading
+ * Delegates to TabManager for loading and state management
+ */
+window.switchTab = async (tabName) => {
+  logger.info(`[switchTab] Switching to: ${tabName}`);
+  
   // Update tab buttons
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.remove('active');
   });
-  document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+  
+  const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+  if (tabButton) {
+    tabButton.classList.add('active');
+  }
 
-  // Update tab content
+  // Update tab content visibility
   document.querySelectorAll('.tab-content').forEach((content) => {
     content.classList.remove('active');
+    content.style.display = 'none';
   });
-  document.getElementById(`tab-${tabName}`)?.classList.add('active');
+  
+  const tabContent = document.getElementById(`tab-${tabName}`);
+  if (tabContent) {
+    tabContent.classList.add('active');
+    tabContent.style.display = 'block';
+  }
 
-  // Load data based on active tab - RECARGAR SIEMPRE CON TRADUCCIONES
-  if (tabName === 'dashboard') {
-    loadDashboardStats();
-  } else if (tabName === 'databases') {
-    loadContainers();
-  } else if (tabName === 'images') {
-    loadImages();
-  } else if (tabName === 'migration') {
-    checkLocalPostgres();
-    loadMigratedDatabases();
-  } else if (tabName === 'volumes') {
-    loadVolumes();
-  } else if (tabName === 'compose') {
-    loadComposeTab();
-  } else if (tabName === 'templates') {
-    loadTemplatesTab();
+  // Notify polling manager about tab change
+  polling.setActiveTab(tabName);
+
+  // Use TabManager to handle loading
+  try {
+    await tabManager.switchTab(tabName);
+    logger.info(`[switchTab] Tab ${tabName} loaded successfully`);
+  } catch (error) {
+    logger.error(`[switchTab] Error loading tab ${tabName}:`, error);
+    showNotification(`Error loading ${tabName}: ${error}`, 'error');
   }
 };
 
 // ===== LOCAL POSTGRES MIGRATION =====
-let localPostgresConfig = null;
-let allLocalDatabases = [];
-let allMigratedDatabases = [];
+// Removed: localPostgresConfig = null; // Now using appState
+// Removed: allLocalDatabases = []; // Now using appState
+// Removed: allMigratedDatabases = []; // Now using appState
 
 async function checkLocalPostgres() {
   const statusDot = document.getElementById('status-dot');
@@ -1346,7 +1971,7 @@ async function connectLocalPostgres(e) {
 
   try {
     const _result = await invoke('connect_local_postgres', { config });
-    localPostgresConfig = config;
+  appState.setMigration("localPostgresConfig", config);
 
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
@@ -1378,14 +2003,14 @@ async function loadLocalDatabases() {
 
   try {
     const databases = await invoke('list_local_databases', {
-      config: localPostgresConfig,
+      config: appState.getMigration("localPostgresConfig"),
     });
 
     if (!databases.length) {
       list.innerHTML = '';
       noData.style.display = 'block';
       container.style.display = 'block';
-      allLocalDatabases = [];
+  appState.setData("allLocalDatabases", []);
       return;
     }
 
@@ -1393,7 +2018,7 @@ async function loadLocalDatabases() {
     container.style.display = 'block';
 
     // Store all databases
-    allLocalDatabases = databases;
+  appState.setData("allLocalDatabases", databases);
 
     // Inicializar el componente de filtros si no existe
     if (!migrationSearchFilters) {
@@ -1414,10 +2039,10 @@ function renderLocalDatabases() {
   if (!list) return;
 
   console.log('[renderLocalDatabases] migrationSearchFilters exists:', !!migrationSearchFilters);
-  console.log('[renderLocalDatabases] allLocalDatabases length:', allLocalDatabases?.length || 0);
+  console.log('[renderLocalDatabases] appState.getData("allLocalDatabases") length:', appState.getData("allLocalDatabases")?.length || 0);
 
   // Aplicar filtros si el componente existe
-  let filteredDatabases = allLocalDatabases || [];
+  let filteredDatabases = appState.getData("allLocalDatabases") || [];
   if (migrationSearchFilters) {
     console.log('[renderLocalDatabases] Applying filters...');
     filteredDatabases = migrationSearchFilters.applyFilters(filteredDatabases);
@@ -1428,11 +2053,11 @@ function renderLocalDatabases() {
     list.innerHTML = '';
     noData.style.display = 'block';
     if (resultsCount) {
-      resultsCount.textContent = (allLocalDatabases && allLocalDatabases.length > 0) 
+      resultsCount.textContent = (appState.getData("allLocalDatabases") && appState.getData("allLocalDatabases").length > 0) 
         ? 'No results found' 
         : '';
     }
-    if (allLocalDatabases && allLocalDatabases.length > 0) {
+    if (appState.getData("allLocalDatabases") && appState.getData("allLocalDatabases").length > 0) {
       noData.querySelector('p').textContent = 'No databases match your search criteria.';
     } else {
       noData.querySelector('p').textContent = 'No databases found in local PostgreSQL';
@@ -1446,7 +2071,7 @@ function renderLocalDatabases() {
   if (resultsCount) {
     if (migrationSearchFilters && migrationSearchFilters.getActiveFiltersCount() > 0) {
       resultsCount.innerHTML = `
-        Showing <strong>${filteredDatabases.length}</strong> of <strong>${allLocalDatabases.length}</strong> databases
+        Showing <strong>${filteredDatabases.length}</strong> of <strong>${appState.getData("allLocalDatabases").length}</strong> databases
         <span class="filter-badge">${migrationSearchFilters.getActiveFiltersCount()} active filters</span>
       `;
     } else {
@@ -1530,7 +2155,7 @@ async function startMigration(dbName) {
 
   try {
     const _result = await invoke('migrate_database', {
-      config: localPostgresConfig,
+      config: appState.getMigration("localPostgresConfig"),
       databaseName: dbName,
     });
 
@@ -1608,7 +2233,7 @@ async function executeDeleteOriginalDatabase(dbName) {
 
   try {
     await invoke('delete_original_database', {
-      config: localPostgresConfig,
+      config: appState.getMigration("localPostgresConfig"),
       databaseName: dbName,
     });
 
@@ -1635,7 +2260,7 @@ async function loadMigratedDatabases() {
       list.innerHTML = '';
       noData.style.display = 'block';
       container.style.display = 'none';
-      allMigratedDatabases = [];
+  appState.setData("allMigratedDatabases", []);
       return;
     }
 
@@ -1747,28 +2372,44 @@ window.closeDeleteOriginalModal = closeDeleteOriginalModal;
 window.executeDeleteOriginalDatabase = executeDeleteOriginalDatabase;
 window.removeMigratedDatabase = removeMigratedDatabase;
 
-// ===== IMAGES TAB =====
-async function loadImages(applyFilters = false) {
+/**
+ * Load images with intelligent caching
+ * @param {boolean} applyFilters - If true, use cached data with filters
+ * @param {boolean} forceRefresh - If true, bypass cache
+ */
+async function loadImages(applyFilters = false, forceRefresh = false) {
   const list = document.getElementById('images-list');
   const noData = document.getElementById('no-images');
   const resultsCount = document.getElementById('results-count-images');
 
   try {
     // Si no se está aplicando filtros, recargar desde la API
-    if (!applyFilters) {
+    if (!applyFilters || forceRefresh) {
+      if (forceRefresh) {
+        cache.invalidate('images');
+      }
+      
       showLoading('loadingImages');
-      allImages = await invoke('list_images');
-      console.log('[loadImages] Loaded from API:', allImages.length, 'images');
+      const images = await cache.get(
+        'images',
+        () => invoke('list_images'),
+        60000 // 60 second TTL (images change less frequently)
+      );
+      appState.setData('allImages', images);
+      console.log('[loadImages] Loaded from API:', images.length, 'images');
     }
 
-    console.log('[loadImages] imagesSearchFilters exists:', !!imagesSearchFilters);
+    const imagesSearchFilters = appState.getComponent('imagesSearchFilters');
+    const allImages = appState.getData('allImages');
+    
+    console.log('[loadImages] appState.getComponent("imagesSearchFilters") exists:', !!imagesSearchFilters);
     console.log('[loadImages] allImages length:', allImages?.length || 0);
 
     // Aplicar filtros si el componente existe
     let images = allImages || [];
-    if (imagesSearchFilters) {
+    if (appState.getComponent("imagesSearchFilters")) {
       console.log('[loadImages] Applying filters...');
-      images = imagesSearchFilters.applyFilters(images);
+      images = appState.getComponent("imagesSearchFilters").applyFilters(images);
       console.log('[loadImages] After filters:', images.length, 'images');
     }
 
@@ -1787,10 +2428,10 @@ async function loadImages(applyFilters = false) {
 
     // Mostrar información de resultados
     if (resultsCount) {
-      if (imagesSearchFilters && imagesSearchFilters.getActiveFiltersCount() > 0) {
+      if (imagesSearchFilters && appState.getComponent("imagesSearchFilters").getActiveFiltersCount() > 0) {
         resultsCount.innerHTML = `
           Showing <strong>${images.length}</strong> of <strong>${allImages.length}</strong> images
-          <span class="filter-badge">${imagesSearchFilters.getActiveFiltersCount()} active filters</span>
+          <span class="filter-badge">${appState.getComponent("imagesSearchFilters").getActiveFiltersCount()} active filters</span>
         `;
       } else {
         resultsCount.textContent = `Showing ${images.length} images`;
@@ -1879,7 +2520,10 @@ async function executeRemoveImage(id) {
   try {
     await invoke('remove_image', { imageId: id });
     showNotification('Image removed successfully', 'success');
-    await loadImages();
+    
+    // Invalidate cache
+    cache.invalidate('images');
+    await loadImages(false, true);
   } catch (e) {
     showNotification('Error: ' + e, 'error');
   } finally {
@@ -1893,7 +2537,7 @@ window.confirmRemoveImage = confirmRemoveImage;
 window.executeRemoveImage = executeRemoveImage;
 
 // ===== VOLUMES MANAGEMENT =====
-let currentVolume = null;
+// Removed: currentVolume = null; // Now using appState
 
 async function loadVolumes() {
   const list = document.getElementById('volumes-list');
@@ -2036,7 +2680,7 @@ async function executePruneVolumes() {
 }
 
 function openBackupVolumeModal(volumeName) {
-  currentVolume = volumeName;
+  appState.setModal("currentVolume", volumeName);
   document.getElementById('backup-volume-name').textContent = volumeName;
   document.getElementById('backup-path').value = '';
   document.getElementById('backup-volume-modal').classList.add('active');
@@ -2044,7 +2688,7 @@ function openBackupVolumeModal(volumeName) {
 
 function closeBackupVolumeModal() {
   document.getElementById('backup-volume-modal').classList.remove('active');
-  currentVolume = null;
+  appState.setModal("currentVolume", null);
 }
 
 async function executeBackupVolume(e) {
@@ -2056,7 +2700,7 @@ async function executeBackupVolume(e) {
 
   try {
     const result = await invoke('backup_volume', {
-      volumeName: currentVolume,
+      volumeName: appState.getModal("currentVolume"),
       backupPath,
     });
     showNotification(result, 'success');
@@ -2068,7 +2712,7 @@ async function executeBackupVolume(e) {
 }
 
 function openRestoreVolumeModal(volumeName) {
-  currentVolume = volumeName;
+  appState.setModal("currentVolume", volumeName);
   document.getElementById('restore-volume-name').textContent = volumeName;
   document.getElementById('restore-file').value = '';
   document.getElementById('restore-volume-modal').classList.add('active');
@@ -2076,7 +2720,7 @@ function openRestoreVolumeModal(volumeName) {
 
 function closeRestoreVolumeModal() {
   document.getElementById('restore-volume-modal').classList.remove('active');
-  currentVolume = null;
+  appState.setModal("currentVolume", null);
 }
 
 async function executeRestoreVolume(e) {
@@ -2092,7 +2736,7 @@ async function executeRestoreVolume(e) {
 
   try {
     const result = await invoke('restore_volume', {
-      volumeName: currentVolume,
+      volumeName: appState.getModal("currentVolume"),
       backupFile,
     });
     showNotification(result, 'success');
@@ -2117,12 +2761,12 @@ window.closeRestoreVolumeModal = closeRestoreVolumeModal;
 window.executeRestoreVolume = executeRestoreVolume;
 
 // ===== MONITORING =====
-let currentMonitoringContainer = null;
-let monitoringInterval = null;
-let cpuChart = null;
-let memoryChart = null;
-let cpuHistory = [];
-let memoryHistory = [];
+// Removed: currentMonitoringContainer = null; // Now using appState
+// Removed: monitoringInterval = null; // Now using appState
+// Removed: appState.setMonitoring("cpuChart", null); // Now using appState
+// Removed: appState.setMonitoring("memoryChart", null); // Now using appState
+// Removed: cpuHistory = []; // Now using appState
+// Removed: memoryHistory = []; // Now using appState
 const MAX_HISTORY_POINTS = 30; // 30 puntos
 let currentChartType = 'line'; // 'line', 'bar', 'area'
 
@@ -2135,13 +2779,13 @@ function formatBytes(bytes) {
 }
 
 async function openMonitoringModal(containerId, containerName) {
-  currentMonitoringContainer = containerId;
+  appState.setModal("currentMonitoringContainer", containerId);
   document.getElementById('monitoring-container-name').textContent = containerName;
   document.getElementById('monitoring-modal').classList.add('active');
   
   // Reset historiales
-  cpuHistory = [];
-  memoryHistory = [];
+  appState.setMonitoring("cpuHistory", []);
+  appState.setMonitoring("memoryHistory", []);
   
   try {
     // Cargar Chart.js
@@ -2155,12 +2799,12 @@ async function openMonitoringModal(containerId, containerName) {
     await updateMonitoringStats();
     
     // Actualizar cada 2 segundos
-    monitoringInterval = setInterval(updateMonitoringStats, 2000);
+  appState.setMonitoring("interval", setInterval(updateMonitoringStats, 2000));
   } catch (e) {
     console.error('Error loading charts:', e);
     // Continuar sin gráficas
     await updateMonitoringStats();
-    monitoringInterval = setInterval(updateMonitoringStats, 2000);
+  appState.setMonitoring("interval", setInterval(updateMonitoringStats, 2000));
     showNotification('Charts unavailable, showing stats only', 'warning');
   }
 }
@@ -2168,22 +2812,21 @@ async function openMonitoringModal(containerId, containerName) {
 function closeMonitoringModal() {
   document.getElementById('monitoring-modal').classList.remove('active');
   
-  if (monitoringInterval) {
-    clearInterval(monitoringInterval);
-    monitoringInterval = null;
+  if (appState.getMonitoring("interval")) {
+    clearInterval(appState.getMonitoring("interval"));
+  appState.setMonitoring("interval", null);
   }
   
   // Destruir gráficas
-  if (cpuChart) {
-    cpuChart.destroy();
-    cpuChart = null;
+  if (appState.getMonitoring("cpuChart")) {
+    appState.getMonitoring("cpuChart").destroy();
+    appState.setMonitoring("cpuChart", null);
   }
-  if (memoryChart) {
-    memoryChart.destroy();
-    memoryChart = null;
+  if (appState.getMonitoring("memoryChart")) {
+    appState.getMonitoring("memoryChart").destroy();
+    appState.setMonitoring("memoryChart", null);
   }
-  
-  currentMonitoringContainer = null;
+  appState.setModal("currentMonitoringContainer", null);
 }
 
 function initializeCharts() {
@@ -2195,8 +2838,8 @@ function initializeCharts() {
   const Chart = window.Chart;
   
   // Destruir gráficas existentes
-  if (cpuChart) cpuChart.destroy();
-  if (memoryChart) memoryChart.destroy();
+  if (cpuChart) appState.getMonitoring("cpuChart").destroy();
+  if (memoryChart) appState.getMonitoring("memoryChart").destroy();
   
   const cpuCtx = document.getElementById('cpu-chart').getContext('2d');
   const memoryCtx = document.getElementById('memory-chart').getContext('2d');
@@ -2260,13 +2903,13 @@ function initializeCharts() {
     }
   };
   
-  cpuChart = new Chart(cpuCtx, {
+  const cpuChart = new Chart(cpuCtx, {
     type: chartType,
     data: {
       labels: [],
       datasets: [{
         label: 'CPU %',
-        data: cpuHistory,
+        data: appState.getMonitoring("cpuHistory"),
         borderColor: '#3b82f6',
         backgroundColor: isArea ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.7)',
         tension: currentChartType === 'line' || isArea ? 0.4 : 0,
@@ -2276,13 +2919,13 @@ function initializeCharts() {
     options: chartOptions
   });
   
-  memoryChart = new Chart(memoryCtx, {
+  const memoryChart = new Chart(memoryCtx, {
     type: chartType,
     data: {
       labels: [],
       datasets: [{
         label: 'Memory %',
-        data: memoryHistory,
+        data: appState.getMonitoring("memoryHistory"),
         borderColor: '#8b5cf6',
         backgroundColor: isArea ? 'rgba(139, 92, 246, 0.3)' : 'rgba(139, 92, 246, 0.7)',
         tension: currentChartType === 'line' || isArea ? 0.4 : 0,
@@ -2307,7 +2950,7 @@ function changeChartType(newType) {
   initializeCharts();
   
   // Actualizar inmediatamente con los datos actuales
-  if (cpuChart && memoryChart && cpuHistory.length > 0) {
+  if (cpuChart && memoryChart && appState.getMonitoring("cpuHistory").length > 0) {
     updateChartsData();
   }
 }
@@ -2315,11 +2958,11 @@ function changeChartType(newType) {
 // Función helper para actualizar datos de las gráficas
 function updateChartsData() {
   // SIN LABELS - Quitar las horas que funcionan mal
-  const labels = Array(cpuHistory.length).fill('');
+  const labels = Array(appState.getMonitoring("cpuHistory").length).fill('');
   
   // Calcular escala dinámica para CPU
-  const cpuMax = Math.max(...cpuHistory, 1);
-  const cpuMin = Math.min(...cpuHistory, 0);
+  const cpuMax = Math.max(...appState.getMonitoring("cpuHistory"), 1);
+  const cpuMin = Math.min(...appState.getMonitoring("cpuHistory"), 0);
   const cpuRange = cpuMax - cpuMin;
   
   // Si el rango es pequeño (< 5%), ajustar escala para mejor visualización
@@ -2343,8 +2986,8 @@ function updateChartsData() {
   }
   
   // Calcular escala dinámica para Memory
-  const memMax = Math.max(...memoryHistory, 1);
-  const memMin = Math.min(...memoryHistory, 0);
+  const memMax = Math.max(...appState.getMonitoring("memoryHistory"), 1);
+  const memMin = Math.min(...appState.getMonitoring("memoryHistory"), 0);
   const memRange = memMax - memMin;
   
   let memScaleMax, memScaleMin;
@@ -2363,20 +3006,20 @@ function updateChartsData() {
   }
   
   // Actualizar CPU chart con escala dinámica
-  cpuChart.data.labels = labels;
-  cpuChart.data.datasets[0].data = [...cpuHistory];
-  cpuChart.options.scales.y.min = cpuScaleMin;
-  cpuChart.options.scales.y.max = cpuScaleMax;
-  cpuChart.options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((cpuScaleMax - cpuScaleMin) / 4));
-  cpuChart.update('none');
+  appState.getMonitoring("cpuChart").data.labels = labels;
+  appState.getMonitoring("cpuChart").data.datasets[0].data = [...appState.getMonitoring("cpuHistory")];
+  appState.getMonitoring("cpuChart").options.scales.y.min = cpuScaleMin;
+  appState.getMonitoring("cpuChart").options.scales.y.max = cpuScaleMax;
+  appState.getMonitoring("cpuChart").options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((cpuScaleMax - cpuScaleMin) / 4));
+  appState.getMonitoring("cpuChart").update('none');
   
   // Actualizar Memory chart con escala dinámica
-  memoryChart.data.labels = labels;
-  memoryChart.data.datasets[0].data = [...memoryHistory];
-  memoryChart.options.scales.y.min = memScaleMin;
-  memoryChart.options.scales.y.max = memScaleMax;
-  memoryChart.options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((memScaleMax - memScaleMin) / 4));
-  memoryChart.update('none');
+  appState.getMonitoring("memoryChart").data.labels = labels;
+  appState.getMonitoring("memoryChart").data.datasets[0].data = [...appState.getMonitoring("memoryHistory")];
+  appState.getMonitoring("memoryChart").options.scales.y.min = memScaleMin;
+  appState.getMonitoring("memoryChart").options.scales.y.max = memScaleMax;
+  appState.getMonitoring("memoryChart").options.scales.y.ticks.stepSize = Math.max(5, Math.ceil((memScaleMax - memScaleMin) / 4));
+  appState.getMonitoring("memoryChart").update('none');
 }
 
 async function updateMonitoringStats() {
@@ -2401,7 +3044,7 @@ async function updateMonitoringStats() {
     memoryHistory.push(stats.memory_percentage);
     
     // Limitar historial
-    if (cpuHistory.length > MAX_HISTORY_POINTS) {
+    if (appState.getMonitoring("cpuHistory").length > MAX_HISTORY_POINTS) {
       cpuHistory.shift();
       memoryHistory.shift();
     }
@@ -2448,19 +3091,20 @@ window.closeMonitoringModal = closeMonitoringModal;
 window.changeChartType = changeChartType;
 
 // ===== TEMPLATES =====
-let selectedTemplateForDb = null;
-let templateSelect = null;
-let versionSelect = null;
+// Removed: selectedTemplateForDb = null; // Now using appState
+// Removed: templateSelect = null; // Now using appState
+// Removed: versionSelect = null; // Now using appState
 
 function loadComposeTab() {
-  if (!composeManager) {
-    composeManager = new DockerCompose(invoke, showNotification, showLoading, hideLoading);
+  if (!appState.getComponent("composeManager")) {
+  const composeManager = new DockerCompose(invoke, showNotification, showLoading, hideLoading);
+    appState.setComponent("composeManager", composeManager);
     window.composeManager = composeManager;
   }
   const content = document.getElementById('compose-tab-content');
   if (content) {
-    content.innerHTML = composeManager.render();
-    composeManager.loadProjects();
+    content.innerHTML = appState.getComponent("composeManager").render();
+    appState.getComponent("composeManager").loadProjects();
   }
 }
 
@@ -2470,7 +3114,7 @@ function loadTemplatesTab() {
 
 function loadTemplateOptions() {
   const templates = getAllTemplates();
-  const dbType = selectedDbType;
+  const dbType = appState.getUI("selectedDbType");
 
   // Filter templates that support current db type
   const availableTemplates = Object.values(templates).filter(
@@ -2487,17 +3131,17 @@ function loadTemplateOptions() {
 
   // Destroy previous instance if exists
   if (templateSelect) {
-    templateSelect.destroy();
+    appState.getComponent("templateSelect").destroy();
   }
 
   // Create new CustomSelect
-  templateSelect = new CustomSelect('db-template-select', {
+  const templateSelect = new CustomSelect('db-template-select', {
     placeholder: 'Default Configuration',
     items: items,
     value: '',
     onChange: (value) => {
-      selectedTemplateForDb = value || null;
-      if (selectedTemplateForDb) {
+  appState.setUI("selectedTemplateForDb", value || null);
+      if (appState.getUI("selectedTemplateForDb")) {
         const template = templates[selectedTemplateForDb];
         showNotification(`Template "${template.name}" selected. Configuration will be applied on creation.`, 'info');
       }
