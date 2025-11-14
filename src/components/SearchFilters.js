@@ -3,6 +3,8 @@
  * Handles search and filter functionality for databases, images and migration
  */
 
+import { debounce } from '../lib/utils/debounce.js';
+
 export class SearchFilters {
   constructor(mode = 'databases') {
     // mode can be: 'databases', 'images', 'migration'
@@ -34,6 +36,12 @@ export class SearchFilters {
     }
 
     this.listeners = [];
+
+    // Create debounced version of updateFilter for search inputs
+    // This prevents excessive filtering while user is typing
+    this.debouncedUpdateFilter = debounce((key, value) => {
+      this.updateFilter(key, value);
+    }, 300); // 300ms delay - good balance between responsiveness and performance
   }
 
   /**
@@ -379,13 +387,20 @@ export class SearchFilters {
     const sortOrderBtnId = `sort-order-btn-${this.mode}`;
     const resetBtnId = `reset-filters-btn-${this.mode}`;
 
-    // Search input
+    // Search input - with debouncing to avoid excessive filtering while typing
     const searchInput = document.getElementById(searchId);
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
-        this.updateFilter('search', e.target.value);
-        // Only update the clear button, not the whole component
-        this.updateClearButton(e.target.value);
+        const value = e.target.value;
+
+        // Update filter value immediately (for internal state)
+        this.filters.search = value;
+
+        // Update UI immediately (clear button)
+        this.updateClearButton(value);
+
+        // Debounce the actual filtering/rendering to avoid performance issues
+        this.debouncedUpdateFilter('search', value);
       });
     }
 
@@ -393,13 +408,14 @@ export class SearchFilters {
     const clearSearchBtn = document.getElementById(clearBtnId);
     if (clearSearchBtn) {
       clearSearchBtn.addEventListener('click', () => {
-        this.updateFilter('search', '');
+        this.filters.search = '';
         const searchInput = document.getElementById(searchId);
         if (searchInput) {
           searchInput.value = '';
           searchInput.focus();
         }
-        // Update the clear button visibility
+        // Clear button needs immediate response, no debounce
+        this.updateFilter('search', '');
         this.updateClearButton('');
       });
     }
@@ -424,11 +440,14 @@ export class SearchFilters {
         });
       }
 
-      // Port filter
+      // Port filter - also debounced as it's text input
       const filterPort = document.getElementById('filter-port');
       if (filterPort) {
         filterPort.addEventListener('input', (e) => {
-          this.updateFilter('port', e.target.value);
+          const value = e.target.value;
+          this.filters.port = value;
+          // Debounce port filter updates
+          this.debouncedUpdateFilter('port', value);
         });
       }
     }
