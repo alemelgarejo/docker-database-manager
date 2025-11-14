@@ -211,15 +211,114 @@ function showNotification(message, type = 'success') {
   };
 }
 
+/**
+ * Check if Docker is running and available
+ * @returns {Promise<boolean>} True if Docker is connected, false otherwise
+ */
 async function checkDocker() {
   try {
-    await invoke('check_docker');
-    document.getElementById('docker-status').textContent = 'Docker Connected';
-    return true;
+    const isConnected = await invoke('check_docker');
+    if (isConnected) {
+      document.getElementById('docker-status').textContent = 'Docker Connected';
+      hideDockerError();
+      return true;
+    } else {
+      document.getElementById('docker-status').textContent = 'Docker Disconnected';
+      showDockerError();
+      return false;
+    }
   } catch (_e) {
-    document.getElementById('docker-status').textContent =
-      'Docker Disconnected';
+    document.getElementById('docker-status').textContent = 'Docker Disconnected';
+    showDockerError();
     return false;
+  }
+}
+
+/**
+ * Show Docker error overlay
+ */
+function showDockerError() {
+  let errorOverlay = document.getElementById('docker-error-overlay');
+  if (!errorOverlay) {
+    errorOverlay = document.createElement('div');
+    errorOverlay.id = 'docker-error-overlay';
+    errorOverlay.className = 'docker-error-overlay';
+    errorOverlay.innerHTML = `
+      <div class="docker-error-content">
+        <div class="docker-error-icon">🐳</div>
+        <h2>Docker Not Running</h2>
+        <p>Docker Desktop is not running or not accessible.</p>
+        <p class="docker-error-subtitle">Please start Docker Desktop to continue.</p>
+        <div class="docker-error-actions">
+          <button class="btn btn-primary" onclick="openDockerDesktop()">
+            ${getIcon('play')} Open Docker Desktop
+          </button>
+          <button class="btn btn-secondary" onclick="retryDockerConnection()">
+            ${getIcon('refresh')} Retry Connection
+          </button>
+        </div>
+        <p class="docker-error-help">
+          <strong>Need help?</strong> Make sure Docker Desktop is installed and running.
+        </p>
+      </div>
+    `;
+    document.body.appendChild(errorOverlay);
+  }
+  errorOverlay.style.display = 'flex';
+}
+
+/**
+ * Hide Docker error overlay
+ */
+function hideDockerError() {
+  const errorOverlay = document.getElementById('docker-error-overlay');
+  if (errorOverlay) {
+    errorOverlay.style.display = 'none';
+  }
+}
+
+/**
+ * Open Docker Desktop application
+ */
+async function openDockerDesktop() {
+  try {
+    showNotification('Attempting to open Docker Desktop...', 'info');
+    await invoke('open_docker_desktop');
+    showNotification('Docker Desktop opened. Waiting for it to start...', 'info');
+    
+    // Wait a bit and retry connection
+    setTimeout(async () => {
+      await retryDockerConnection();
+    }, 5000);
+  } catch (e) {
+    showNotification('Could not open Docker Desktop automatically. Please open it manually.', 'warning');
+    console.error('Error opening Docker Desktop:', e);
+  }
+}
+
+/**
+ * Retry Docker connection
+ */
+async function retryDockerConnection() {
+  showLoading('Checking Docker connection...');
+  
+  try {
+    const connected = await checkDocker();
+    
+    if (connected) {
+      showNotification('Docker connected successfully!', 'success');
+      hideDockerError();
+      
+      // Reload data
+      await loadDashboardStats();
+      await loadContainers();
+    } else {
+      showNotification('Docker is still not available. Please start Docker Desktop.', 'warning');
+    }
+  } catch (e) {
+    showNotification('Failed to connect to Docker: ' + e, 'error');
+  } finally {
+    hideLoading();
   }
 }
 
@@ -1094,6 +1193,10 @@ window.closeCreateModal = () => {
   showStep1();
 };
 
+// Expose Docker management functions
+window.openDockerDesktop = openDockerDesktop;
+window.retryDockerConnection = retryDockerConnection;
+
 window.closeLogsModal = () =>
   document.getElementById('logs-modal').classList.remove('active');
 window.closeSqlModal = () =>
@@ -1203,32 +1306,38 @@ window.addEventListener('DOMContentLoaded', async () => {
             'Docker connected';
           console.log('✅ Initial data loaded');
         } else {
-          console.error('❌ No se pudo conectar con Docker');
+          console.warn('⚠️ Docker not connected on startup');
           document.getElementById('docker-status').textContent =
-            '❌ Docker no conectado';
+            '❌ Docker not connected';
+          // Show error overlay but don't block the UI
+          showDockerError();
         }
       })
       .catch((error) => {
-        console.error('❌ Error al verificar Docker:', error);
+        console.error('❌ Error checking Docker:', error);
         document.getElementById('docker-status').textContent =
-          '❌ Docker no conectado';
+          '❌ Docker not connected';
+        showDockerError();
       });
 
-    // Actualizar cada 10 segundos
+    // Actualizar cada 30 segundos (aumentado de 10 para reducir spam si Docker no está)
     setInterval(async () => {
       try {
         if (await checkDocker()) {
-          await loadContainers();
-          // Actualizar dashboard si está activo
+          // Solo cargar si la pestaña está activa
           const dashboardTab = document.getElementById('tab-dashboard');
-          if (dashboardTab?.classList.contains('active')) {
-            loadDashboardStats();
+          const databasesTab = document.getElementById('tab-databases');
+          
+          if (databasesTab?.classList.contains('active')) {
+            await loadContainers();
+          } else if (dashboardTab?.classList.contains('active')) {
+            await loadDashboardStats();
           }
         }
       } catch (e) {
         console.error('Error en actualización periódica:', e);
       }
-    }, 10000);
+    }, 30000); // 30 segundos
 
     // Verificar actualizaciones después de 3 segundos
     setTimeout(() => checkForUpdates(true), 3000);
