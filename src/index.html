@@ -10,47 +10,32 @@
   </head>
 
   <body>
-    <div class="app-container">
+    <div id="app">
       <!-- Header -->
-      <header class="header">
-        <h1>
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align: middle; margin-right: 8px;">
-            <rect x="3" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-            <rect x="7" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-            <rect x="11" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-            <rect x="7" y="4" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-            <rect x="11" y="4" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-            <rect x="15" y="8" width="3" height="3" rx="0.5" fill="currentColor" stroke="none"/>
-            <path d="M19 11c0.5-0.5 1.5-0.5 2-0.2 0.5 0.3 1 1 1 1.7 0 1.5-1 2.5-2 2.5H4c-1.5 0-3-1.2-3-3s1.5-3 3-3c0-2.5 2-4.5 4.5-4.5 1.5 0 2.8 0.7 3.5 1.8" stroke="currentColor" fill="none"/>
-          </svg>
-          Docker Database Manager
-        </h1>
-        <div class="header-actions">
-          <button id="refresh-btn" class="btn btn-ghost" data-tooltip="Refresh">
-            Refresh
-          </button>
-          <button id="new-db-btn" class="btn btn-primary" data-tooltip="New Database">
-            New Database
-          </button>
+      <header class="app-header">
+        <div class="header-content">
+          <div class="header-left">
+            <div class="app-icon">DB</div>
+            <div class="app-title-group">
+              <h1>Docker DB Manager</h1>
+              <p id="docker-status">Checking Docker...</p>
+            </div>
+          </div>
+          <div class="header-right">
+            <!-- Dark mode toggle will be inserted here by JS -->
+            <button id="refresh-btn" class="btn btn-secondary btn-sm" data-tooltip="Refresh">
+              Refresh
+            </button>
+            <button id="new-db-btn" class="btn btn-primary btn-sm" onclick="openCreateModal()" data-tooltip="New Database">
+              New Database
+            </button>
+          </div>
         </div>
       </header>
 
-      <!-- Docker Status -->
-      <div class="status-bar">
-        <span id="docker-status"></span>
-        <button
-          onclick="window.checkUpdatesManually()"
-          class="update-btn"
-          data-tooltip="Check for updates"
-        >
-          <span>Check Updates</span>
-        </button>
-      </div>
-
-      <!-- Main Content -->
-      <main class="main-content">
-        <!-- Tabs Navigation -->
-        <nav class="tabs-nav">
+      <!-- Tabs Navigation -->
+      <div class="tabs-container">
+        <nav class="tabs-wrapper">
           <button
             class="tab-btn active"
             data-tab="dashboard"
@@ -107,20 +92,87 @@
             <span class="tab-icon"></span>
             <span>Templates</span>
           </button>
+          <button
+            class="tab-btn"
+            data-tab="settings"
+            onclick="switchTab('settings')"
+          >
+            <span class="tab-icon"></span>
+            <span>Settings</span>
+          </button>
         </nav>
+      </div>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <div class="content-container">
+          
+          <!-- Tab: Dashboard -->
+          <section id="tab-dashboard" class="tab-content active">
+            <!-- Stats Cards -->
+            <div class="dashboard-stats">
+              <div class="stat-card">
+                <div class="stat-icon primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a2 2 0 0 0 9 3 2 2 0 0 0 9-3V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+                </div>
+                <div class="stat-content">
+                  <h3>Total Containers</h3>
+                  <p id="stat-total">0</p>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon success">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </div>
+                <div class="stat-content">
+                  <h3>Running</h3>
+                  <p id="stat-running">0</p>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon warning">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+                </div>
+                <div class="stat-content">
+                  <h3>Stopped</h3>
+                  <p id="stat-stopped">0</p>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon info">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                </div>
+                <div class="stat-content">
+                  <h3>Images</h3>
+                  <p id="stat-images">0</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Containers -->
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Recent Containers</h2>
+              </div>
+              <div id="recent-containers"></div>
+            </div>
+          </section>
 
         <!-- Tab: Dashboard -->
-        <section id="tab-dashboard" class="tab-content active">
+        <section id="tab-dashboard-old" class="tab-content" style="display: none;">
           <div class="containers-section">
             <!-- Stats Cards -->
-            <div class="stats-grid">
+            <div class="stats-grid" style="display: none;">
               <div class="stat-card">
                 <div class="stat-icon">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
                 </div>
                 <div class="stat-content">
                   <span class="stat-label">Total Containers</span>
-                  <span class="stat-value" id="stat-total">0</span>
+                  <span class="stat-value" id="stat-total-old">0</span>
                 </div>
               </div>
 
@@ -130,7 +182,7 @@
                 </div>
                 <div class="stat-content">
                   <span class="stat-label">Running</span>
-                  <span class="stat-value" id="stat-running">0</span>
+                  <span class="stat-value" id="stat-running-old">0</span>
                 </div>
               </div>
 
@@ -201,77 +253,88 @@
 
         <!-- Tab: Databases -->
         <section id="tab-databases" class="tab-content">
-          <div class="containers-section">
-            <div class="section-header">
-              <h2 data-i18n="dockerDatabases">Docker Databases</h2>
+          <!-- Page Header -->
+          <div class="section-header">
+            <div>
+              <h2>Docker Databases</h2>
+              <p class="section-description">Manage your database containers</p>
+            </div>
+            <div class="section-actions">
               <button class="btn btn-primary" onclick="openCreateModal()" data-tooltip="Create new database">
-                <span class="icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                </span>
-                <span>Create Database</span>
+                Create Database
               </button>
             </div>
-            
-            <!-- Search and Filters Component -->
-            <div id="search-filters">
-              <!-- Will be populated by JavaScript -->
+          </div>
+          
+          <!-- Search and Filters Component -->
+          <div id="search-filters">
+            <!-- Will be populated by JavaScript -->
+          </div>
+          
+          <div class="results-info">
+            <span id="results-count"></span>
+          </div>
+          
+          <div id="containers-list" class="containers-grid">
+            <!-- Containers will be loaded here -->
+          </div>
+          <div id="no-containers" class="empty-state" style="display: none">
+            <div class="empty-state-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a2 2 0 0 0 9 3 2 2 0 0 0 9-3V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
             </div>
-            
-            <div class="results-info">
-              <span id="results-count"></span>
-            </div>
-            
-            <div id="containers-list" class="containers-grid">
-              <!-- Containers will be loaded here -->
-            </div>
-            <div id="no-containers" class="no-data" style="display: none">
-              <p data-i18n="noDatabasesCreated"></p>
-            </div>
+            <h3 class="empty-state-title">No databases created yet</h3>
+            <p class="empty-state-description">Create your first database to get started</p>
           </div>
         </section>
 
         <!-- Tab: Images -->
         <section id="tab-images" class="tab-content">
-          <div class="containers-section">
-            <div class="section-header">
-              <h2 data-i18n="dockerImages">Docker Images</h2>
+          <!-- Page Header -->
+          <div class="section-header">
+            <div>
+              <h2>Docker Images</h2>
+              <p class="section-description">Manage your Docker images</p>
+            </div>
+            <div class="section-actions">
               <button class="btn btn-primary" onclick="openPullImageModal()" data-tooltip="Pull new image">
-                <span class="icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                </span>
-                <span>Pull Image</span>
+                Pull Image
               </button>
             </div>
-            
-            <!-- Search and Filters Component -->
-            <div id="search-filters-images">
-              <!-- Will be populated by JavaScript -->
+          </div>
+          
+          <!-- Search and Filters Component -->
+          <div id="search-filters-images">
+            <!-- Will be populated by JavaScript -->
+          </div>
+          
+          <div class="results-info">
+            <span id="results-count-images"></span>
+          </div>
+          
+          <div id="images-list" class="images-grid">
+            <!-- Images will be loaded here -->
+          </div>
+          <div id="no-images" class="empty-state" style="display: none">
+            <div class="empty-state-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
             </div>
-            
-            <div class="results-info">
-              <span id="results-count-images"></span>
-            </div>
-            
-            <div id="images-list" class="images-grid">
-              <!-- Images will be loaded here -->
-            </div>
-            <div id="no-images" class="no-data" style="display: none">
-              <p data-i18n="noImagesDownloaded"></p>
-            </div>
+            <h3 class="empty-state-title">No images downloaded</h3>
+            <p class="empty-state-description">Pull an image or create a database to get started</p>
           </div>
         </section>
 
         <!-- Tab: Migration -->
         <section id="tab-migration" class="tab-content">
-          <div class="migration-section">
-            <h2>Local Database Migration</h2>
-            <p class="section-description">
-              Migrate your local PostgreSQL databases to Docker containers
-            </p>
+          <div class="section-header">
+            <div>
+              <h2>Local Database Migration</h2>
+              <p class="section-description">Migrate your local PostgreSQL databases to Docker containers</p>
+            </div>
+          </div>
 
-            <!-- Connection Status -->
-            <div id="local-postgres-status" class="connection-status">
-              <div class="status-indicator">
+          <!-- Connection Status -->
+          <div id="local-postgres-status" class="card">
+            <div class="status-indicator">
                 <span class="status-dot" id="status-dot"></span>
                 <span id="status-text">Checking local PostgreSQL...</span>
               </div>
@@ -284,7 +347,12 @@
 
             <!-- Connection Form -->
             <div id="connection-form" class="connection-form" style="display: none">
-              <h3>Connect to Local PostgreSQL</h3>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md);">
+                <h3 style="margin: 0;">Connect to Local PostgreSQL</h3>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="applyMigrationDefaults()" data-tooltip="Load default values from settings">
+                  Load Defaults
+                </button>
+              </div>
               <p class="form-help-text">
                 Enter your local PostgreSQL credentials to list and migrate databases
               </p>
@@ -429,6 +497,315 @@
           <div class="templates-section">
             <div id="templates-tab-content">
               <!-- Templates will be loaded here -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab: Settings -->
+        <section id="tab-settings" class="tab-content">
+          <div class="settings-container">
+            <div class="section-header">
+              <div>
+                <h2>Settings</h2>
+                <p class="section-description">Configure your Docker DB Manager preferences</p>
+              </div>
+            </div>
+
+            <!-- Appearance Settings -->
+            <div class="settings-section">
+              <div class="settings-section-header">
+                <h3>Appearance</h3>
+                <p>Customize the look and feel of the application</p>
+              </div>
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Theme</label>
+                    <p class="setting-description">Choose between light and dark mode</p>
+                  </div>
+                  <div class="setting-control">
+                    <div id="setting-theme"></div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Compact Mode</label>
+                    <p class="setting-description">Reduce spacing for more content on screen</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-compact-mode">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Animations</label>
+                    <p class="setting-description">Enable smooth transitions and animations</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-animations">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Migration Settings -->
+            <div class="settings-section">
+              <div class="settings-section-header">
+                <h3>Migration</h3>
+                <p>Default connection settings for local database migration</p>
+              </div>
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Default Host</label>
+                    <p class="setting-description">Default PostgreSQL host address</p>
+                  </div>
+                  <div class="setting-control">
+                    <input type="text" id="setting-migration-host" class="setting-input" placeholder="localhost">
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Default Port</label>
+                    <p class="setting-description">Default PostgreSQL port</p>
+                  </div>
+                  <div class="setting-control">
+                    <input type="number" id="setting-migration-port" class="setting-input" placeholder="5432" min="1024" max="65535">
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Default Username</label>
+                    <p class="setting-description">Default PostgreSQL username</p>
+                  </div>
+                  <div class="setting-control">
+                    <input type="text" id="setting-migration-user" class="setting-input" placeholder="postgres">
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Default Password</label>
+                    <p class="setting-description">Default PostgreSQL password (stored locally)</p>
+                  </div>
+                  <div class="setting-control">
+                    <input type="password" id="setting-migration-password" class="setting-input" placeholder="Leave empty if no default">
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Remember Credentials</label>
+                    <p class="setting-description">Save credentials after successful connection</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-remember-credentials">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Monitoring Settings -->
+            <div class="settings-section">
+              <div class="settings-section-header">
+                <h3>Monitoring</h3>
+                <p>Configure container monitoring behavior</p>
+              </div>
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Update Interval</label>
+                    <p class="setting-description">How often to refresh monitoring stats</p>
+                  </div>
+                  <div class="setting-control">
+                    <div id="setting-monitoring-interval"></div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Chart Type</label>
+                    <p class="setting-description">Default chart visualization type</p>
+                  </div>
+                  <div class="setting-control">
+                    <div id="setting-chart-type"></div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">History Duration</label>
+                    <p class="setting-description">How long to keep monitoring history</p>
+                  </div>
+                  <div class="setting-control">
+                    <div id="setting-history-duration"></div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Show Alerts</label>
+                    <p class="setting-description">Display warnings for high resource usage</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-show-alerts">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Database Settings -->
+            <div class="settings-section">
+              <div class="settings-section-header">
+                <h3>Database</h3>
+                <p>Default settings for new database containers</p>
+              </div>
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Auto-start Containers</label>
+                    <p class="setting-description">Automatically start new containers after creation</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-auto-start">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Show Connection URL</label>
+                    <p class="setting-description">Display connection URL on database cards</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-show-url">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Default Database Type</label>
+                    <p class="setting-description">Preselect a database type when creating</p>
+                  </div>
+                  <div class="setting-control">
+                    <div id="setting-default-db-type"></div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Confirm Delete</label>
+                    <p class="setting-description">Ask for confirmation before deleting containers</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-confirm-delete">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Notifications Settings -->
+            <div class="settings-section">
+              <div class="settings-section-header">
+                <h3>Notifications</h3>
+                <p>Control notification behavior</p>
+              </div>
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Notification Duration</label>
+                    <p class="setting-description">How long notifications stay visible</p>
+                  </div>
+                  <div class="setting-control">
+                    <div id="setting-notification-duration"></div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Sound Notifications</label>
+                    <p class="setting-description">Play sound on important notifications</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-sound-notifications">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Success Notifications</label>
+                    <p class="setting-description">Show notifications for successful operations</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-show-success">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Performance Settings -->
+            <div class="settings-section">
+              <div class="settings-section-header">
+                <h3>Performance</h3>
+                <p>Optimize application performance</p>
+              </div>
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Auto Refresh</label>
+                    <p class="setting-description">Automatically refresh data in active tab</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-auto-refresh">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Refresh Interval</label>
+                    <p class="setting-description">How often to refresh data automatically</p>
+                  </div>
+                  <div class="setting-control">
+                    <div id="setting-refresh-interval"></div>
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label class="setting-label">Lazy Load Images</label>
+                    <p class="setting-description">Load Docker images list only when needed</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="setting-lazy-load">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="settings-actions">
+              <button class="btn btn-secondary" onclick="resetSettings()">Reset to Defaults</button>
+              <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
             </div>
           </div>
         </section>
@@ -682,7 +1059,7 @@
                 autocapitalize="off"
                 spellcheck="false"
               />
-              <small>⚠️ This will replace all data in the volume</small>
+              <small>Warning: This will replace all data in the volume</small>
             </div>
           </div>
           <div class="modal-footer">
@@ -812,8 +1189,8 @@
           </div>
 
           <div class="form-group">
-            <label for="template-icon">Icon (emoji):</label>
-            <input type="text" id="template-icon" value="⭐" maxlength="2" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <label for="template-icon">Icon:</label>
+            <input type="text" id="template-icon" value="*" maxlength="2" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           </div>
 
           <div class="form-group">
@@ -839,7 +1216,7 @@
     <div id="pull-image-modal" class="modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Pull Docker Image</h2>
+          <h2 class="modal-title">Pull Docker Image</h2>
           <button class="modal-close" onclick="closePullImageModal()">×</button>
         </div>
         <form id="pull-image-form" class="modal-body" onsubmit="handlePullImage(event)">
@@ -855,7 +1232,7 @@
               autocapitalize="off"
               spellcheck="false"
             />
-            <small>Enter the full image name with tag (e.g., postgres:15)</small>
+            <small style="color: var(--text-secondary); display: block; margin-top: 4px;">Enter the full image name with tag (e.g., postgres:15)</small>
           </div>
 
           <div class="modal-footer">
@@ -863,14 +1240,26 @@
               Cancel
             </button>
             <button type="submit" class="btn btn-primary">
-              <span class="icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </span>
-              <span>Pull Image</span>
+              Pull Image
             </button>
           </div>
         </form>
       </div>
+    </div>
+
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer>
+        <p>Docker DB Manager • Updated: <span id="footer-time"></span></p>
+      </footer>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+      <div id="loading-spinner"></div>
+      <div id="loading-text">Loading...</div>
     </div>
   </body>
 </html>
