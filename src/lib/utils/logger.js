@@ -247,7 +247,7 @@ export class Logger {
    * @param {Function} fn - Function to execute in group
    */
   group(label, fn) {
-    this.debug(`📦 ${label}`);
+    this.debug(`[Group] ${label}`);
     console.group();
     try {
       fn();

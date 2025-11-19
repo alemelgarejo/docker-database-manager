@@ -22,6 +22,10 @@ const updateLogger = createLogger('Updates');
 // Create tab manager instance
 const tabManager = new TabManager();
 
+// Global search filter instances and migration data
+let migrationSearchFilters = null;
+let allMigratedDatabases = [];
+
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
   return new Promise((resolve) => {
@@ -57,15 +61,15 @@ logger.debug('Waiting for Tauri API...');
 async function checkForUpdates(silent = true) {
   try {
     if (!check) {
-      console.log('⚠️ Plugin de actualización no disponible');
+      console.log('[Update] Plugin not available');
       return;
     }
 
-    console.log('🔍 Verificando actualizaciones...');
+    console.log('[Update] Checking for updates...');
     const update = await check();
 
     if (update?.available) {
-      console.log('✨ Nueva versión disponible:', update.version);
+      console.log('[Update] New version available:', update.version);
 
       const shouldUpdate = await ask(
         `¡Nueva versión ${update.version} disponible!\n\n¿Deseas actualizar ahora?`,
@@ -252,7 +256,9 @@ function showDockerError() {
     errorOverlay.className = 'docker-error-overlay';
     errorOverlay.innerHTML = `
       <div class="docker-error-content">
-        <div class="docker-error-icon">🐳</div>
+        <div class="docker-error-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
         <h2>Docker Not Running</h2>
         <p>Docker Desktop is not running or not accessible.</p>
         <p class="docker-error-subtitle">Please start Docker Desktop to continue.</p>
@@ -1621,6 +1627,87 @@ if (window.location.hostname === 'localhost' || window.location.hostname === 'ta
   console.log('%cTry: __DEV__.cache.stats() or __DEV__.polling.stats()', 'color: #94a3b8');
 }
 
+/**
+ * Initialize Dark Mode functionality
+ * Creates toggle button and manages theme persistence
+ */
+function initializeDarkMode() {
+  // Check if dark mode button already exists
+  if (document.getElementById('dark-mode-toggle')) return;
+  
+  // Get saved preference or system preference
+  const savedTheme = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
+  
+  // Apply initial theme
+  if (isDark) {
+    document.body.classList.add('dark-mode');
+  }
+  
+  // Create dark mode toggle button
+  const darkModeToggle = document.createElement('button');
+  darkModeToggle.id = 'dark-mode-toggle';
+  darkModeToggle.className = 'dark-mode-toggle';
+  darkModeToggle.setAttribute('data-tooltip', isDark ? 'Light Mode' : 'Dark Mode');
+  darkModeToggle.innerHTML = isDark ? '☀' : '☾';
+  
+  // Add click handler
+  darkModeToggle.addEventListener('click', () => {
+    const isCurrentlyDark = document.body.classList.contains('dark-mode');
+    
+    if (isCurrentlyDark) {
+      document.body.classList.remove('dark-mode');
+      darkModeToggle.innerHTML = '☾';
+      darkModeToggle.setAttribute('data-tooltip', 'Dark Mode');
+      localStorage.setItem('theme', 'light');
+    } else {
+      document.body.classList.add('dark-mode');
+      darkModeToggle.innerHTML = '☀';
+      darkModeToggle.setAttribute('data-tooltip', 'Light Mode');
+      localStorage.setItem('theme', 'dark');
+    }
+  });
+  
+  // Insert button in header-right container
+  const headerRight = document.querySelector('.header-right');
+  
+  if (headerRight) {
+    // Insert at the beginning of header-right (before other buttons)
+    headerRight.insertBefore(darkModeToggle, headerRight.firstChild);
+  } else {
+    // Fallback: try old structure
+    const header = document.querySelector('.header');
+    const headerActions = document.querySelector('.header-actions');
+    
+    if (headerActions && header) {
+      header.insertBefore(darkModeToggle, headerActions);
+    } else if (header) {
+      header.appendChild(darkModeToggle);
+    }
+  }
+  
+  logger.info('[Dark Mode] Initialized', { theme: isDark ? 'dark' : 'light' });
+}
+
+// Expose dark mode toggle globally
+window.toggleDarkMode = function() {
+  const darkModeToggle = document.getElementById('dark-mode-toggle');
+  if (darkModeToggle) {
+    darkModeToggle.click();
+  }
+};
+
+/**
+ * Update footer timestamp
+ */
+function updateFooterTime() {
+  const footerTime = document.getElementById('footer-time');
+  if (footerTime) {
+    footerTime.textContent = new Date().toLocaleTimeString('es-ES');
+  }
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     // Esperar a que Tauri esté disponible
@@ -1631,6 +1718,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     relaunch = api.relaunch;
 
     console.log('[Tauri] API initialized');
+
+    // ===== DARK MODE SETUP =====
+    initializeDarkMode();
 
     // APLICAR IDIOMA GUARDADO INMEDIATAMENTE    // Inyectar iconos en botones del header
     const refreshBtn = document.getElementById('refresh-btn');
@@ -1729,6 +1819,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       // Setup intelligent polling
       setupPolling();
       logger.info('[App] Polling system started');
+      
+      // Update footer time
+      updateFooterTime();
+      setInterval(updateFooterTime, 1000);
     } else {
       logger.warn('[App] Docker not connected on startup');
       showDockerError(); // Show overlay only if really not connected
@@ -1809,6 +1903,12 @@ function initializeTabs() {
   tabManager.registerTab('templates', async () => {
     logger.info('[Tab] Loading templates...');
     loadTemplatesTab();
+  });
+  
+  // Settings - lazy load
+  tabManager.registerTab('settings', async () => {
+    logger.info('[Tab] Loading settings...');
+    initializeSettings();
   });
   
   logger.info('[initializeTabs] Tabs registered. Loaded:', tabManager.getLoadedCount());
@@ -2178,11 +2278,11 @@ function confirmDeleteOriginalDatabase(dbName) {
     <div class="confirm-modal active" id="delete-original-modal">
       <div class="confirm-modal-content" style="max-width: 500px;">
         <div class="confirm-modal-header">
-          <h3>⚠️ Delete Original Database?</h3>
+          <h3>Delete Original Database?</h3>
         </div>
         <div class="confirm-modal-body">
           <div style="background: #dc2626; color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-            <strong style="font-size: 1.1em;">⚠️ DANGER ZONE - NO UNDO</strong>
+            <strong style="font-size: 1.1em;">DANGER ZONE - NO UNDO</strong>
           </div>
           <p style="font-size: 1.05em; font-weight: 600; margin-bottom: 1rem;">
             You are about to PERMANENTLY DELETE the original database:
@@ -2191,7 +2291,7 @@ function confirmDeleteOriginalDatabase(dbName) {
             <code style="color: #ef4444; font-size: 1.1em; font-weight: bold;">${dbName}</code>
           </div>
           <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
-            <p style="margin: 0; color: #991b1b; font-weight: 600;">⚠️ THIS ACTION CANNOT BE UNDONE</p>
+            <p style="margin: 0; color: #991b1b; font-weight: 600;">WARNING: THIS ACTION CANNOT BE UNDONE</p>
             <p style="margin: 0.5rem 0 0; color: #7f1d1d;">All data in the original database will be LOST FOREVER.</p>
           </div>
           <p style="margin-bottom: 0.5rem;"><strong>Before proceeding, make sure:</strong></p>
@@ -2767,7 +2867,7 @@ window.executeRestoreVolume = executeRestoreVolume;
 // Removed: appState.setMonitoring("memoryChart", null); // Now using appState
 // Removed: cpuHistory = []; // Now using appState
 // Removed: memoryHistory = []; // Now using appState
-const MAX_HISTORY_POINTS = 30; // 30 puntos
+const MAX_HISTORY_POINTS = 60; // 60 puntos = 30 segundos a 500ms
 let currentChartType = 'line'; // 'line', 'bar', 'area'
 
 function formatBytes(bytes) {
@@ -2798,13 +2898,13 @@ async function openMonitoringModal(containerId, containerName) {
     // Cargar stats iniciales
     await updateMonitoringStats();
     
-    // Actualizar cada 2 segundos
-  appState.setMonitoring("interval", setInterval(updateMonitoringStats, 2000));
+    // Actualizar cada 500ms (0.5 segundos) para respuesta rápida
+    appState.setMonitoring("interval", setInterval(updateMonitoringStats, 500));
   } catch (e) {
     console.error('Error loading charts:', e);
     // Continuar sin gráficas
     await updateMonitoringStats();
-  appState.setMonitoring("interval", setInterval(updateMonitoringStats, 2000));
+    appState.setMonitoring("interval", setInterval(updateMonitoringStats, 500));
     showNotification('Charts unavailable, showing stats only', 'warning');
   }
 }
@@ -2838,13 +2938,16 @@ function initializeCharts() {
   const Chart = window.Chart;
   
   // Destruir gráficas existentes
-  if (cpuChart) appState.getMonitoring("cpuChart").destroy();
-  if (memoryChart) appState.getMonitoring("memoryChart").destroy();
+  const existingCpuChart = appState.getMonitoring("cpuChart");
+  const existingMemoryChart = appState.getMonitoring("memoryChart");
+  if (existingCpuChart) existingCpuChart.destroy();
+  if (existingMemoryChart) existingMemoryChart.destroy();
   
   const cpuCtx = document.getElementById('cpu-chart').getContext('2d');
   const memoryCtx = document.getElementById('memory-chart').getContext('2d');
   
   // Determinar configuración según el tipo de gráfica
+  const currentChartType = appState.getMonitoring("currentChartType") || 'line';
   const isArea = currentChartType === 'area';
   const isBar = currentChartType === 'bar';
   const chartType = isArea ? 'line' : currentChartType;
@@ -2909,7 +3012,7 @@ function initializeCharts() {
       labels: [],
       datasets: [{
         label: 'CPU %',
-        data: appState.getMonitoring("cpuHistory"),
+        data: appState.getMonitoring("cpuHistory") || [],
         borderColor: '#3b82f6',
         backgroundColor: isArea ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.7)',
         tension: currentChartType === 'line' || isArea ? 0.4 : 0,
@@ -2925,7 +3028,7 @@ function initializeCharts() {
       labels: [],
       datasets: [{
         label: 'Memory %',
-        data: appState.getMonitoring("memoryHistory"),
+        data: appState.getMonitoring("memoryHistory") || [],
         borderColor: '#8b5cf6',
         backgroundColor: isArea ? 'rgba(139, 92, 246, 0.3)' : 'rgba(139, 92, 246, 0.7)',
         tension: currentChartType === 'line' || isArea ? 0.4 : 0,
@@ -2934,6 +3037,10 @@ function initializeCharts() {
     },
     options: chartOptions
   });
+  
+  // Guardar charts en appState
+  appState.setMonitoring("cpuChart", cpuChart);
+  appState.setMonitoring("memoryChart", memoryChart);
 }
 
 // Función para cambiar el tipo de gráfica
@@ -3023,6 +3130,7 @@ function updateChartsData() {
 }
 
 async function updateMonitoringStats() {
+  const currentMonitoringContainer = appState.getModal("currentMonitoringContainer");
   if (!currentMonitoringContainer) return;
   
   try {
@@ -3039,17 +3147,28 @@ async function updateMonitoringStats() {
     document.getElementById('monitor-disk-read').textContent = formatBytes(stats.block_read_bytes);
     document.getElementById('monitor-disk-write').textContent = formatBytes(stats.block_write_bytes);
     
+    // Obtener historiales de appState
+    const cpuHistory = appState.getMonitoring("cpuHistory") || [];
+    const memoryHistory = appState.getMonitoring("memoryHistory") || [];
+    
     // Añadir a historial
     cpuHistory.push(stats.cpu_percentage);
     memoryHistory.push(stats.memory_percentage);
     
     // Limitar historial
-    if (appState.getMonitoring("cpuHistory").length > MAX_HISTORY_POINTS) {
+    const MAX_HISTORY_POINTS = 60; // 60 puntos = 30 segundos a 500ms
+    if (cpuHistory.length > MAX_HISTORY_POINTS) {
       cpuHistory.shift();
       memoryHistory.shift();
     }
     
+    // Guardar historiales actualizados
+    appState.setMonitoring("cpuHistory", cpuHistory);
+    appState.setMonitoring("memoryHistory", memoryHistory);
+    
     // Actualizar gráficas si existen
+    const cpuChart = appState.getMonitoring("cpuChart");
+    const memoryChart = appState.getMonitoring("memoryChart");
     if (window.Chart && cpuChart && memoryChart) {
       updateChartsData();
     }
@@ -3365,4 +3484,340 @@ window.handlePullImage = handlePullImage;
 // Expose functions globally
 window.loadTemplatesTab = loadTemplatesTab;
 window.loadTemplateOptions = loadTemplateOptions;
+
+// =====================================================
+// SETTINGS MANAGEMENT
+// =====================================================
+
+const DEFAULT_SETTINGS = {
+  // Appearance
+  theme: 'dark',
+  compactMode: false,
+  animations: true,
+  
+  // Migration
+  migrationHost: 'localhost',
+  migrationPort: 5432,
+  migrationUser: 'postgres',
+  migrationPassword: '',
+  rememberCredentials: true,
+  
+  // Monitoring
+  monitoringInterval: 500,
+  chartType: 'line',
+  historyDuration: 60,
+  showAlerts: true,
+  
+  // Database
+  autoStart: true,
+  showUrl: true,
+  defaultDbType: 'none',
+  confirmDelete: true,
+  
+  // Notifications
+  notificationDuration: 3000,
+  soundNotifications: false,
+  showSuccess: true,
+  
+  // Performance
+  autoRefresh: true,
+  refreshInterval: 30000,
+  lazyLoad: true
+};
+
+function loadSettings() {
+  const saved = localStorage.getItem('app-settings');
+  if (saved) {
+    try {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    } catch (e) {
+      console.error('Error loading settings:', e);
+      return DEFAULT_SETTINGS;
+    }
+  }
+  return DEFAULT_SETTINGS;
+}
+
+function saveSettingsToStorage(settings) {
+  try {
+    localStorage.setItem('app-settings', JSON.stringify(settings));
+    return true;
+  } catch (e) {
+    console.error('Error saving settings:', e);
+    return false;
+  }
+}
+
+function initializeSettings() {
+  const settings = loadSettings();
+  
+  // Apply theme
+  if (settings.theme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else if (settings.theme === 'light') {
+    document.documentElement.classList.remove('dark');
+  } else if (settings.theme === 'auto') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', prefersDark);
+  }
+  
+  // Initialize CustomSelects
+  new CustomSelect('setting-theme', {
+    placeholder: 'Select theme',
+    value: settings.theme,
+    items: [
+      { value: 'light', label: 'Light' },
+      { value: 'dark', label: 'Dark' },
+      { value: 'auto', label: 'Auto (System)' }
+    ]
+  });
+  
+  new CustomSelect('setting-monitoring-interval', {
+    placeholder: 'Select interval',
+    value: settings.monitoringInterval.toString(),
+    items: [
+      { value: '500', label: 'Fast (0.5s)' },
+      { value: '1000', label: 'Normal (1s)' },
+      { value: '2000', label: 'Slow (2s)' },
+      { value: '5000', label: 'Very Slow (5s)' }
+    ]
+  });
+  
+  new CustomSelect('setting-chart-type', {
+    placeholder: 'Select chart type',
+    value: settings.chartType,
+    items: [
+      { value: 'line', label: 'Line' },
+      { value: 'area', label: 'Area' },
+      { value: 'bar', label: 'Bar' }
+    ]
+  });
+  
+  new CustomSelect('setting-history-duration', {
+    placeholder: 'Select duration',
+    value: settings.historyDuration.toString(),
+    items: [
+      { value: '30', label: '30 seconds' },
+      { value: '60', label: '1 minute' },
+      { value: '120', label: '2 minutes' },
+      { value: '300', label: '5 minutes' }
+    ]
+  });
+  
+  new CustomSelect('setting-default-db-type', {
+    placeholder: 'Select database',
+    value: settings.defaultDbType,
+    items: [
+      { value: 'none', label: 'None (Ask every time)' },
+      { value: 'postgresql', label: 'PostgreSQL' },
+      { value: 'mysql', label: 'MySQL' },
+      { value: 'mongodb', label: 'MongoDB' },
+      { value: 'redis', label: 'Redis' },
+      { value: 'mariadb', label: 'MariaDB' }
+    ]
+  });
+  
+  new CustomSelect('setting-notification-duration', {
+    placeholder: 'Select duration',
+    value: settings.notificationDuration.toString(),
+    items: [
+      { value: '2000', label: '2 seconds' },
+      { value: '3000', label: '3 seconds' },
+      { value: '5000', label: '5 seconds' },
+      { value: '10000', label: '10 seconds' }
+    ]
+  });
+  
+  new CustomSelect('setting-refresh-interval', {
+    placeholder: 'Select interval',
+    value: settings.refreshInterval.toString(),
+    items: [
+      { value: '10000', label: '10 seconds' },
+      { value: '30000', label: '30 seconds' },
+      { value: '60000', label: '1 minute' },
+      { value: '300000', label: '5 minutes' }
+    ]
+  });
+  
+  // Update input fields
+  const hostInput = document.getElementById('setting-migration-host');
+  if (hostInput) hostInput.value = settings.migrationHost;
+  
+  const portInput = document.getElementById('setting-migration-port');
+  if (portInput) portInput.value = settings.migrationPort;
+  
+  const userInput = document.getElementById('setting-migration-user');
+  if (userInput) userInput.value = settings.migrationUser;
+  
+  const passwordInput = document.getElementById('setting-migration-password');
+  if (passwordInput) passwordInput.value = settings.migrationPassword;
+  
+  // Update checkboxes
+  const compactModeCheckbox = document.getElementById('setting-compact-mode');
+  if (compactModeCheckbox) compactModeCheckbox.checked = settings.compactMode;
+  
+  const animationsCheckbox = document.getElementById('setting-animations');
+  if (animationsCheckbox) animationsCheckbox.checked = settings.animations;
+  
+  const rememberCredentialsCheckbox = document.getElementById('setting-remember-credentials');
+  if (rememberCredentialsCheckbox) rememberCredentialsCheckbox.checked = settings.rememberCredentials;
+  
+  const showAlertsCheckbox = document.getElementById('setting-show-alerts');
+  if (showAlertsCheckbox) showAlertsCheckbox.checked = settings.showAlerts;
+  
+  const autoStartCheckbox = document.getElementById('setting-auto-start');
+  if (autoStartCheckbox) autoStartCheckbox.checked = settings.autoStart;
+  
+  const showUrlCheckbox = document.getElementById('setting-show-url');
+  if (showUrlCheckbox) showUrlCheckbox.checked = settings.showUrl;
+  
+  const confirmDeleteCheckbox = document.getElementById('setting-confirm-delete');
+  if (confirmDeleteCheckbox) confirmDeleteCheckbox.checked = settings.confirmDelete;
+  
+  const soundNotificationsCheckbox = document.getElementById('setting-sound-notifications');
+  if (soundNotificationsCheckbox) soundNotificationsCheckbox.checked = settings.soundNotifications;
+  
+  const showSuccessCheckbox = document.getElementById('setting-show-success');
+  if (showSuccessCheckbox) showSuccessCheckbox.checked = settings.showSuccess;
+  
+  const autoRefreshCheckbox = document.getElementById('setting-auto-refresh');
+  if (autoRefreshCheckbox) autoRefreshCheckbox.checked = settings.autoRefresh;
+  
+  const lazyLoadCheckbox = document.getElementById('setting-lazy-load');
+  if (lazyLoadCheckbox) lazyLoadCheckbox.checked = settings.lazyLoad;
+}
+
+function saveSettings() {
+  // Get CustomSelect values
+  const themeContainer = document.getElementById('setting-theme');
+  const theme = themeContainer?.querySelector('.custom-select-value')?.textContent?.toLowerCase().includes('light') ? 'light' 
+    : themeContainer?.querySelector('.custom-select-value')?.textContent?.toLowerCase().includes('dark') ? 'dark' 
+    : 'auto';
+  
+  const monitoringIntervalContainer = document.getElementById('setting-monitoring-interval');
+  const monitoringIntervalText = monitoringIntervalContainer?.querySelector('.custom-select-value')?.textContent || 'Fast (0.5s)';
+  const monitoringInterval = parseInt(monitoringIntervalText.match(/\d+/)?.[0]) === 0 ? 500 
+    : parseInt(monitoringIntervalText.match(/\d+/)?.[0]) * 1000 || 500;
+  
+  const chartTypeContainer = document.getElementById('setting-chart-type');
+  const chartType = chartTypeContainer?.querySelector('.custom-select-value')?.textContent?.toLowerCase() || 'line';
+  
+  const historyDurationContainer = document.getElementById('setting-history-duration');
+  const historyDurationText = historyDurationContainer?.querySelector('.custom-select-value')?.textContent || '60';
+  const historyDuration = parseInt(historyDurationText.match(/\d+/)?.[0]) || 60;
+  
+  const defaultDbTypeContainer = document.getElementById('setting-default-db-type');
+  const defaultDbTypeText = defaultDbTypeContainer?.querySelector('.custom-select-value')?.textContent?.toLowerCase() || 'none';
+  const defaultDbType = defaultDbTypeText.includes('postgresql') ? 'postgresql'
+    : defaultDbTypeText.includes('mysql') ? 'mysql'
+    : defaultDbTypeText.includes('mongodb') ? 'mongodb'
+    : defaultDbTypeText.includes('redis') ? 'redis'
+    : defaultDbTypeText.includes('mariadb') ? 'mariadb'
+    : 'none';
+  
+  const notificationDurationContainer = document.getElementById('setting-notification-duration');
+  const notificationDurationText = notificationDurationContainer?.querySelector('.custom-select-value')?.textContent || '3';
+  const notificationDuration = parseInt(notificationDurationText.match(/\d+/)?.[0]) * 1000 || 3000;
+  
+  const refreshIntervalContainer = document.getElementById('setting-refresh-interval');
+  const refreshIntervalText = refreshIntervalContainer?.querySelector('.custom-select-value')?.textContent || '30';
+  const refreshInterval = parseInt(refreshIntervalText.match(/\d+/)?.[0]) * 1000 || 30000;
+  
+  // Get input values
+  const hostInput = document.getElementById('setting-migration-host');
+  const portInput = document.getElementById('setting-migration-port');
+  const userInput = document.getElementById('setting-migration-user');
+  const passwordInput = document.getElementById('setting-migration-password');
+  
+  // Get checkbox values
+  const compactModeCheckbox = document.getElementById('setting-compact-mode');
+  const animationsCheckbox = document.getElementById('setting-animations');
+  const rememberCredentialsCheckbox = document.getElementById('setting-remember-credentials');
+  const showAlertsCheckbox = document.getElementById('setting-show-alerts');
+  const autoStartCheckbox = document.getElementById('setting-auto-start');
+  const showUrlCheckbox = document.getElementById('setting-show-url');
+  const confirmDeleteCheckbox = document.getElementById('setting-confirm-delete');
+  const soundNotificationsCheckbox = document.getElementById('setting-sound-notifications');
+  const showSuccessCheckbox = document.getElementById('setting-show-success');
+  const autoRefreshCheckbox = document.getElementById('setting-auto-refresh');
+  const lazyLoadCheckbox = document.getElementById('setting-lazy-load');
+  
+  const settings = {
+    theme,
+    compactMode: compactModeCheckbox?.checked || false,
+    animations: animationsCheckbox?.checked !== false,
+    migrationHost: hostInput?.value || 'localhost',
+    migrationPort: parseInt(portInput?.value) || 5432,
+    migrationUser: userInput?.value || 'postgres',
+    migrationPassword: passwordInput?.value || '',
+    rememberCredentials: rememberCredentialsCheckbox?.checked !== false,
+    monitoringInterval,
+    chartType,
+    historyDuration,
+    showAlerts: showAlertsCheckbox?.checked !== false,
+    autoStart: autoStartCheckbox?.checked !== false,
+    showUrl: showUrlCheckbox?.checked !== false,
+    defaultDbType,
+    confirmDelete: confirmDeleteCheckbox?.checked !== false,
+    notificationDuration,
+    soundNotifications: soundNotificationsCheckbox?.checked || false,
+    showSuccess: showSuccessCheckbox?.checked !== false,
+    autoRefresh: autoRefreshCheckbox?.checked !== false,
+    refreshInterval,
+    lazyLoad: lazyLoadCheckbox?.checked !== false
+  };
+  
+  if (saveSettingsToStorage(settings)) {
+    // Apply theme immediately
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else if (theme === 'light') {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    } else if (theme === 'auto') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.classList.toggle('dark', prefersDark);
+      localStorage.setItem('theme', 'auto');
+    }
+    
+    showNotification('Settings saved successfully', 'success');
+  } else {
+    showNotification('Error saving settings', 'error');
+  }
+}
+
+function resetSettings() {
+  if (!confirm('Are you sure you want to reset all settings to defaults?')) {
+    return;
+  }
+  
+  if (saveSettingsToStorage(DEFAULT_SETTINGS)) {
+    initializeSettings();
+    showNotification('Settings reset to defaults', 'success');
+  } else {
+    showNotification('Error resetting settings', 'error');
+  }
+}
+
+function applyMigrationDefaults() {
+  const settings = loadSettings();
+  
+  const hostInput = document.getElementById('local-host');
+  const portInput = document.getElementById('local-port');
+  const userInput = document.getElementById('local-user');
+  const passwordInput = document.getElementById('local-password');
+  
+  if (hostInput) hostInput.value = settings.migrationHost;
+  if (portInput) portInput.value = settings.migrationPort;
+  if (userInput) userInput.value = settings.migrationUser;
+  if (passwordInput) passwordInput.value = settings.migrationPassword;
+}
+
+// Expose settings functions globally
+window.saveSettings = saveSettings;
+window.resetSettings = resetSettings;
+window.loadSettings = loadSettings;
+window.applyMigrationDefaults = applyMigrationDefaults;
+
 

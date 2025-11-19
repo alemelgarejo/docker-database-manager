@@ -4,11 +4,15 @@
  */
 
 import { debounce } from '../lib/utils/debounce.js';
+import { CustomSelect } from './CustomSelect.js';
 
 export class SearchFilters {
   constructor(mode = 'databases') {
     // mode can be: 'databases', 'images', 'migration'
     this.mode = mode;
+    
+    // Store custom select instances for cleanup
+    this.customSelects = {};
 
     // Initialize filters based on mode
     if (mode === 'images') {
@@ -95,7 +99,42 @@ export class SearchFilters {
         sortOrder: 'asc',
       };
     }
+    
+    // Update CustomSelect instances
+    if (this.customSelects.type) {
+      this.customSelects.type.setValue('all', true);
+    }
+    if (this.customSelects.status) {
+      this.customSelects.status.setValue('all', true);
+    }
+    if (this.customSelects.sortBy) {
+      this.customSelects.sortBy.setValue('name', true);
+    }
+    
+    // Update input fields
+    const searchInput = document.getElementById(`search-${this.mode}`);
+    if (searchInput) {
+      searchInput.value = '';
+    }
+    const portInput = document.getElementById('filter-port');
+    if (portInput) {
+      portInput.value = '';
+    }
+    
     this.notifyChange();
+  }
+  
+  /**
+   * Destroy component and cleanup
+   */
+  destroy() {
+    // Cleanup all CustomSelect instances
+    Object.values(this.customSelects).forEach(select => {
+      if (select && select.destroy) {
+        select.destroy();
+      }
+    });
+    this.customSelects = {};
   }
 
   /**
@@ -280,28 +319,7 @@ export class SearchFilters {
           <!-- Sort By -->
           <div class="filter-group">
             <label for="${sortById}">Sort by</label>
-            <select id="${sortById}" class="filter-select">
-              ${
-                this.mode === 'images'
-                  ? `
-                <option value="name">Name</option>
-                <option value="size">Size</option>
-                <option value="created">Date</option>
-              `
-                  : this.mode === 'migration'
-                    ? `
-                <option value="name">Name</option>
-                <option value="created">Date</option>
-              `
-                    : `
-                <option value="name">Name</option>
-                <option value="type">Type</option>
-                <option value="status">Status</option>
-                <option value="port">Port</option>
-                <option value="created">Date</option>
-              `
-              }
-            </select>
+            <div id="${sortById}"></div>
           </div>
 
           <div class="filter-actions">
@@ -337,25 +355,13 @@ export class SearchFilters {
       <!-- Type Filter -->
       <div class="filter-group">
         <label for="filter-type">Type</label>
-        <select id="filter-type" class="filter-select">
-          <option value="all">All types</option>
-          <option value="postgresql">PostgreSQL</option>
-          <option value="mysql">MySQL</option>
-          <option value="mongodb">MongoDB</option>
-          <option value="redis">Redis</option>
-          <option value="mariadb">MariaDB</option>
-        </select>
+        <div id="filter-type"></div>
       </div>
 
       <!-- Status Filter -->
       <div class="filter-group">
         <label for="filter-status">Status</label>
-        <select id="filter-status" class="filter-select">
-          <option value="all">All status</option>
-          <option value="running">Running</option>
-          <option value="stopped">Stopped</option>
-          <option value="exited">Exited</option>
-        </select>
+        <div id="filter-status"></div>
       </div>
 
       <!-- Port Filter -->
@@ -422,23 +428,39 @@ export class SearchFilters {
 
     // Database-specific filters
     if (this.mode === 'databases') {
-      // Type filter
-      const filterType = document.getElementById('filter-type');
-      if (filterType) {
-        filterType.value = this.filters.type;
-        filterType.addEventListener('change', (e) => {
-          this.updateFilter('type', e.target.value);
-        });
-      }
+      // Type filter - CustomSelect
+      const typeItems = [
+        { value: 'all', label: 'All types' },
+        { value: 'postgresql', label: 'PostgreSQL' },
+        { value: 'mysql', label: 'MySQL' },
+        { value: 'mongodb', label: 'MongoDB' },
+        { value: 'redis', label: 'Redis' },
+        { value: 'mariadb', label: 'MariaDB' }
+      ];
+      this.customSelects.type = new CustomSelect('filter-type', {
+        placeholder: 'Select type',
+        value: this.filters.type,
+        items: typeItems,
+        onChange: (value) => {
+          this.updateFilter('type', value);
+        }
+      });
 
-      // Status filter
-      const filterStatus = document.getElementById('filter-status');
-      if (filterStatus) {
-        filterStatus.value = this.filters.status;
-        filterStatus.addEventListener('change', (e) => {
-          this.updateFilter('status', e.target.value);
-        });
-      }
+      // Status filter - CustomSelect
+      const statusItems = [
+        { value: 'all', label: 'All status' },
+        { value: 'running', label: 'Running' },
+        { value: 'stopped', label: 'Stopped' },
+        { value: 'exited', label: 'Exited' }
+      ];
+      this.customSelects.status = new CustomSelect('filter-status', {
+        placeholder: 'Select status',
+        value: this.filters.status,
+        items: statusItems,
+        onChange: (value) => {
+          this.updateFilter('status', value);
+        }
+      });
 
       // Port filter - also debounced as it's text input
       const filterPort = document.getElementById('filter-port');
@@ -452,14 +474,34 @@ export class SearchFilters {
       }
     }
 
-    // Sort by
-    const sortBy = document.getElementById(sortById);
-    if (sortBy) {
-      sortBy.value = this.filters.sortBy;
-      sortBy.addEventListener('change', (e) => {
-        this.updateFilter('sortBy', e.target.value);
-      });
-    }
+    // Sort by - CustomSelect
+    const sortByItems = this.mode === 'images'
+      ? [
+          { value: 'name', label: 'Name' },
+          { value: 'size', label: 'Size' },
+          { value: 'created', label: 'Date' }
+        ]
+      : this.mode === 'migration'
+        ? [
+            { value: 'name', label: 'Name' },
+            { value: 'created', label: 'Date' }
+          ]
+        : [
+            { value: 'name', label: 'Name' },
+            { value: 'type', label: 'Type' },
+            { value: 'status', label: 'Status' },
+            { value: 'port', label: 'Port' },
+            { value: 'created', label: 'Date' }
+          ];
+    
+    this.customSelects.sortBy = new CustomSelect(sortById, {
+      placeholder: 'Sort by',
+      value: this.filters.sortBy,
+      items: sortByItems,
+      onChange: (value) => {
+        this.updateFilter('sortBy', value);
+      }
+    });
 
     // Sort order button
     const sortOrderBtn = document.getElementById(sortOrderBtnId);
