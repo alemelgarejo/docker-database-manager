@@ -521,7 +521,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Theme</label>
-                    <p class="setting-description">Choose between light and dark mode</p>
+                    <p class="setting-description">Cambia el esquema de colores de toda la aplicación inmediatamente</p>
                   </div>
                   <div class="setting-control">
                     <div id="setting-theme"></div>
@@ -530,7 +530,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Compact Mode</label>
-                    <p class="setting-description">Reduce spacing for more content on screen</p>
+                    <p class="setting-description">Reduce TODOS los espacios entre elementos en un 25-50% para ver más contenido</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -542,7 +542,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Animations</label>
-                    <p class="setting-description">Enable smooth transitions and animations</p>
+                    <p class="setting-description">Desactiva TODAS las animaciones y transiciones (más rápido pero menos visual)</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -622,7 +622,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Update Interval</label>
-                    <p class="setting-description">How often to refresh monitoring stats</p>
+                    <p class="setting-description">Cambia cada cuánto se actualizan las stats de CPU/RAM/Network/Disk (más rápido = más preciso pero más carga)</p>
                   </div>
                   <div class="setting-control">
                     <div id="setting-monitoring-interval"></div>
@@ -631,7 +631,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Chart Type</label>
-                    <p class="setting-description">Default chart visualization type</p>
+                    <p class="setting-description">Tipo de gráfica que se muestra por defecto al abrir monitoring (line/area/bar)</p>
                   </div>
                   <div class="setting-control">
                     <div id="setting-chart-type"></div>
@@ -640,7 +640,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">History Duration</label>
-                    <p class="setting-description">How long to keep monitoring history</p>
+                    <p class="setting-description">Cuántos segundos de historial se muestran en las gráficas de monitoring</p>
                   </div>
                   <div class="setting-control">
                     <div id="setting-history-duration"></div>
@@ -649,7 +649,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Show Alerts</label>
-                    <p class="setting-description">Display warnings for high resource usage</p>
+                    <p class="setting-description">Muestra avisos cuando CPU > 80% o RAM > 85% en monitoring</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -671,7 +671,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Auto-start Containers</label>
-                    <p class="setting-description">Automatically start new containers after creation</p>
+                    <p class="setting-description">Los nuevos containers se inician automáticamente después de crearlos</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -683,7 +683,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Show Connection URL</label>
-                    <p class="setting-description">Display connection URL on database cards</p>
+                    <p class="setting-description">Muestra la URL de conexión en las cards de las bases de datos</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -695,7 +695,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Default Database Type</label>
-                    <p class="setting-description">Preselect a database type when creating</p>
+                    <p class="setting-description">Preselecciona este tipo al abrir "New Database" (útil si siempre usas el mismo)</p>
                   </div>
                   <div class="setting-control">
                     <div id="setting-default-db-type"></div>
@@ -704,7 +704,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Confirm Delete</label>
-                    <p class="setting-description">Ask for confirmation before deleting containers</p>
+                    <p class="setting-description">Pide confirmación antes de eliminar containers, images o volumes</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -726,7 +726,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Notification Duration</label>
-                    <p class="setting-description">How long notifications stay visible</p>
+                    <p class="setting-description">Cuántos segundos permanecen visibles las notificaciones antes de desaparecer</p>
                   </div>
                   <div class="setting-control">
                     <div id="setting-notification-duration"></div>
@@ -735,7 +735,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Sound Notifications</label>
-                    <p class="setting-description">Play sound on important notifications</p>
+                    <p class="setting-description">Reproduce un sonido cuando hay errores o warnings</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -747,7 +747,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Success Notifications</label>
-                    <p class="setting-description">Show notifications for successful operations</p>
+                    <p class="setting-description">Muestra notificaciones verdes para operaciones exitosas (desactiva para menos ruido)</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -769,7 +769,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Auto Refresh</label>
-                    <p class="setting-description">Automatically refresh data in active tab</p>
+                    <p class="setting-description">Actualiza automáticamente los datos en segundo plano mientras usas la app</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">
@@ -781,7 +781,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Refresh Interval</label>
-                    <p class="setting-description">How often to refresh data automatically</p>
+                    <p class="setting-description">Cada cuántos segundos se actualizan automáticamente los datos (containers, images, etc)</p>
                   </div>
                   <div class="setting-control">
                     <div id="setting-refresh-interval"></div>
@@ -790,7 +790,7 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label class="setting-label">Lazy Load Images</label>
-                    <p class="setting-description">Load Docker images list only when needed</p>
+                    <p class="setting-description">Carga las imágenes de Docker solo cuando abres la pestaña Images (más rápido si tienes muchas imágenes)</p>
                   </div>
                   <div class="setting-control">
                     <label class="toggle-switch">

@@ -26,6 +26,49 @@ const tabManager = new TabManager();
 let migrationSearchFilters = null;
 let allMigratedDatabases = [];
 
+// Global settings cache
+let globalSettings = null;
+
+// Function to get current settings
+function getSettings() {
+  if (!globalSettings) {
+    globalSettings = loadSettings();
+  }
+  return globalSettings;
+}
+
+// Function to refresh settings cache
+function refreshSettings() {
+  globalSettings = loadSettings();
+  applySettings(globalSettings);
+}
+
+// Function to apply settings to the app
+function applySettings(settings) {
+  console.log('[applySettings] Applying settings:', settings);
+  
+  // Apply compact mode
+  if (settings.compactMode) {
+    document.documentElement.classList.add('compact-mode');
+    console.log('[applySettings] Compact mode enabled');
+  } else {
+    document.documentElement.classList.remove('compact-mode');
+    console.log('[applySettings] Compact mode disabled');
+  }
+  
+  // Apply animations
+  if (!settings.animations) {
+    document.documentElement.classList.add('no-animations');
+    console.log('[applySettings] Animations disabled');
+  } else {
+    document.documentElement.classList.remove('no-animations');
+    console.log('[applySettings] Animations enabled');
+  }
+  
+  // Apply other settings that need immediate effect
+  console.log('[applySettings] Settings applied successfully');
+}
+
 // Función para obtener la API de Tauri de forma segura
 function getTauriAPI() {
   return new Promise((resolve) => {
@@ -139,6 +182,14 @@ function hideLoading() {
 }
 
 function showNotification(message, type = 'success') {
+  // Load settings
+  const settings = loadSettings();
+  
+  // Check if we should show success notifications
+  if (type === 'success' && !settings.showSuccess) {
+    return;
+  }
+  
   const colors = {
     success: '#10b981',
     error: '#dc2626',
@@ -147,6 +198,7 @@ function showNotification(message, type = 'success') {
   };
 
   const notif = document.createElement('div');
+  const animationClass = settings.animations ? 'slideIn' : 'none';
   notif.style.cssText = `
     position: fixed;
     top: 80px;
@@ -162,7 +214,7 @@ function showNotification(message, type = 'success') {
     display: flex;
     align-items: center;
     gap: 1rem;
-    animation: slideIn 0.3s ease;
+    animation: ${animationClass} ${settings.animations ? '0.3s' : '0s'} ease;
   `;
   
   const messageSpan = document.createElement('span');
@@ -188,7 +240,7 @@ function showNotification(message, type = 'success') {
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    transition: background 0.2s ease;
+    transition: ${settings.animations ? 'background 0.2s ease' : 'none'};
   `;
   
   closeBtn.onmouseover = () => {
@@ -200,25 +252,49 @@ function showNotification(message, type = 'success') {
   };
   
   closeBtn.onclick = () => {
-    notif.style.animation = 'slideOut 0.3s ease';
-    setTimeout(() => notif.remove(), 300);
+    if (settings.animations) {
+      notif.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => notif.remove(), 300);
+    } else {
+      notif.remove();
+    }
   };
   
   notif.appendChild(messageSpan);
   notif.appendChild(closeBtn);
   document.body.appendChild(notif);
 
-  const duration = type === 'info' ? 5000 : 3000;
+  // Play sound if enabled
+  if (settings.soundNotifications && (type === 'error' || type === 'warning')) {
+    try {
+      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGS57+adTgwOTqXh8bllHgU2jdXyz3cqBSJ1xe/glEILElyx6OyrWBUIRJze8btoIgQnfsz...'); 
+      audio.volume = 0.3;
+      audio.play().catch(() => {});
+    } catch (e) {
+      // Silence errors
+    }
+  }
+
+  // Use notification duration from settings
+  const duration = settings.notificationDuration || 3000;
   const timeoutId = setTimeout(() => {
-    notif.style.animation = 'slideOut 0.3s ease';
-    setTimeout(() => notif.remove(), 300);
+    if (settings.animations) {
+      notif.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => notif.remove(), 300);
+    } else {
+      notif.remove();
+    }
   }, duration);
   
   // Clear timeout if manually closed
   closeBtn.onclick = () => {
     clearTimeout(timeoutId);
-    notif.style.animation = 'slideOut 0.3s ease';
-    setTimeout(() => notif.remove(), 300);
+    if (settings.animations) {
+      notif.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => notif.remove(), 300);
+    } else {
+      notif.remove();
+    }
   };
 }
 
@@ -1491,6 +1567,18 @@ window.changeLanguage = (lang) => {
 function setupPolling() {
   console.log('[Setup] Initializing intelligent polling...');
   
+  // Get settings for refresh interval and auto-refresh
+  const settings = getSettings();
+  const refreshInterval = settings.refreshInterval || 30000;
+  const autoRefresh = settings.autoRefresh !== false;
+  
+  if (!autoRefresh) {
+    console.log('[Setup] Auto-refresh is disabled in settings');
+    return;
+  }
+  
+  console.log('[Setup] Using refresh interval:', refreshInterval + 'ms');
+  
   // Register polling tasks
   
   // Task 1: Update containers when on databases tab
@@ -1506,7 +1594,7 @@ function setupPolling() {
         console.error('[Polling] Error updating containers:', e);
       }
     },
-    30000, // 30 seconds
+    refreshInterval,
     {
       immediate: false,
       onlyWhenVisible: true,
@@ -1527,7 +1615,7 @@ function setupPolling() {
         console.error('[Polling] Error updating dashboard:', e);
       }
     },
-    30000, // 30 seconds
+    refreshInterval,
     {
       immediate: false,
       onlyWhenVisible: true,
@@ -1535,20 +1623,23 @@ function setupPolling() {
     }
   );
   
-  // Task 3: Update images when on images tab (less frequently)
+  // Task 3: Update images when on images tab
   polling.register(
     'images',
     async () => {
       try {
         if (await checkDocker()) {
-          cache.invalidate('images');
-          await loadImages(false, true);
+          const lazyLoad = settings.lazyLoad !== false;
+          if (!lazyLoad) {
+            cache.invalidate('images');
+            await loadImages(false, true);
+          }
         }
       } catch (e) {
         console.error('[Polling] Error updating images:', e);
       }
     },
-    60000, // 60 seconds (images change less frequently)
+    refreshInterval * 2, // Doble de intervalo para images
     {
       immediate: false,
       onlyWhenVisible: true,
@@ -1721,6 +1812,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // ===== DARK MODE SETUP =====
     initializeDarkMode();
+    
+    // ===== APPLY SETTINGS =====
+    const initialSettings = getSettings();
+    applySettings(initialSettings);
 
     // APLICAR IDIOMA GUARDADO INMEDIATAMENTE    // Inyectar iconos en botones del header
     const refreshBtn = document.getElementById('refresh-btn');
@@ -2898,13 +2993,22 @@ async function openMonitoringModal(containerId, containerName) {
     // Cargar stats iniciales
     await updateMonitoringStats();
     
-    // Actualizar cada 500ms (0.5 segundos) para respuesta rápida
-    appState.setMonitoring("interval", setInterval(updateMonitoringStats, 500));
+    // Get monitoring interval from settings
+    const settings = getSettings();
+    const interval = settings.monitoringInterval || 500;
+    
+    // Actualizar según intervalo configurado
+    appState.setMonitoring("interval", setInterval(updateMonitoringStats, interval));
   } catch (e) {
     console.error('Error loading charts:', e);
     // Continuar sin gráficas
     await updateMonitoringStats();
-    appState.setMonitoring("interval", setInterval(updateMonitoringStats, 500));
+    
+    // Get monitoring interval from settings
+    const settings = getSettings();
+    const interval = settings.monitoringInterval || 500;
+    
+    appState.setMonitoring("interval", setInterval(updateMonitoringStats, interval));
     showNotification('Charts unavailable, showing stats only', 'warning');
   }
 }
@@ -3768,6 +3872,9 @@ function saveSettings() {
   };
   
   if (saveSettingsToStorage(settings)) {
+    // Refresh global settings cache
+    globalSettings = settings;
+    
     // Apply theme immediately
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -3780,6 +3887,9 @@ function saveSettings() {
       document.documentElement.classList.toggle('dark', prefersDark);
       localStorage.setItem('theme', 'auto');
     }
+    
+    // Apply all settings
+    applySettings(settings);
     
     showNotification('Settings saved successfully', 'success');
   } else {
