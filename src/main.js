@@ -2360,9 +2360,24 @@ async function startMigration(dbName) {
     await loadLocalDatabases();
     await loadMigratedDatabases();
     await loadContainers();
+
+    // Preguntar si quiere borrar la base de datos original DESPUÉS de migración exitosa
+    hideLoading();
+    
+    // Pequeño delay para que el usuario vea que la migración fue exitosa
+    setTimeout(() => {
+      if (confirm(
+        `Migration completed successfully!\n\n` +
+        `Would you like to DELETE the original database "${dbName}"?\n\n` +
+        `⚠️ WARNING: This action cannot be undone.\n` +
+        `Only proceed if you've verified the migrated data is correct.`
+      )) {
+        confirmDeleteOriginalDatabase(dbName);
+      }
+    }, 800);
+    
   } catch (error) {
     showNotification(`Migration failed: ${error}`, 'error');
-  } finally {
     hideLoading();
   }
 }
