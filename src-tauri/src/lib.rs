@@ -1,11 +1,12 @@
 use bollard::container::{Config, CreateContainerOptions, ListContainersOptions, LogsOptions, RemoveContainerOptions, StartContainerOptions};
-use bollard::exec::CreateExecOptions;
+use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::image::CreateImageOptions;
 use bollard::Docker;
 use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
+use std::fs;
 use tauri::State;
 use tokio::sync::Mutex;
 
@@ -1641,51 +1642,180 @@ async fn migrate_database(
     docker_state: State<'_, AppState>,
     migration_state: State<'_, MigrationState>,
 ) -> Result<String, String> {
-    use std::process::Command;
-    use std::fs;
     
     let docker = docker_state.docker.lock().await;
     
-    // 1. Crear dump de la base de datos local (formato plain SQL)
+    // 0. Detectar versión de PostgreSQL del servidor local
+    println!("[MIGRATE] Detecting PostgreSQL version...");
+    let (client, connection) = tokio_postgres::connect(
+        &format!(
+            "host={} port={} user={} password={} dbname={}",
+            config.host, config.port, config.user, config.password, database_name
+        ),
+        tokio_postgres::NoTls,
+    )
+    .await
+    .map_err(|e| format!("Failed to connect to source database: {}", e))?;
+    
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("Connection error: {}", e);
+        }
+    });
+    
+    let version_row = client
+        .query_one("SELECT version()", &[])
+        .await
+        .map_err(|e| format!("Failed to get PostgreSQL version: {}", e))?;
+    
+    let version_string: String = version_row.get(0);
+    println!("[MIGRATE] PostgreSQL version: {}", version_string);
+    
+    // Extraer versión mayor (ej: "PostgreSQL 16.1..." -> "16")
+    let postgres_major_version = version_string
+        .split_whitespace()
+        .nth(1)
+        .and_then(|v| v.split('.').next())
+        .unwrap_or("16");
+    
+    println!("[MIGRATE] Using postgres:{} image for compatibility", postgres_major_version);
+    
+    // 1. Crear dump de la base de datos local usando Docker
     let dump_path = format!("/tmp/{}_dump.sql", database_name);
     
     println!("[MIGRATE] Creating dump of database: {}", database_name);
     println!("[MIGRATE] Dump path: {}", dump_path);
     
-    let dump_output = Command::new("pg_dump")
-        .arg("-h")
-        .arg(&config.host)
-        .arg("-p")
-        .arg(config.port.to_string())
-        .arg("-U")
-        .arg(&config.user)
-        .arg("-d")
-        .arg(&database_name)
-        .arg("-F")
-        .arg("p")  // Plain SQL format (not custom)
-        .arg("-f")
-        .arg(&dump_path)
-        .arg("--no-owner")
-        .arg("--no-acl")
-        .env("PGPASSWORD", &config.password)
-        .output()
-        .map_err(|e| format!("Failed to execute pg_dump: {}", e))?;
+    // En lugar de un contenedor que corre y termina, vamos a:
+    // 1. Crear un contenedor con postgres que se quede corriendo
+    // 2. Ejecutar pg_dump via docker exec
+    // 3. Capturar la salida
+    // 4. Eliminar el contenedor
     
-    if !dump_output.status.success() {
-        let stderr = String::from_utf8_lossy(&dump_output.stderr);
-        let stdout = String::from_utf8_lossy(&dump_output.stdout);
-        return Err(format!("pg_dump failed:\nSTDERR: {}\nSTDOUT: {}", stderr, stdout));
+    let dump_container_name = format!("temp-dump-{}-{}", database_name, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+    let postgres_image = format!("postgres:{}", postgres_major_version);
+    
+    // Pull image si no existe
+    println!("[MIGRATE] Pulling postgres image for dump...");
+    let mut stream = docker.create_image(
+        Some(CreateImageOptions {
+            from_image: postgres_image.as_str(),
+            ..Default::default()
+        }),
+        None,
+        None,
+    );
+    
+    while let Some(_) = stream.next().await {}
+    
+    // En Docker Desktop Mac, usar host.docker.internal para acceder al host
+    let host = if config.host == "localhost" || config.host == "127.0.0.1" {
+        "host.docker.internal"
+    } else {
+        &config.host
+    };
+    
+    println!("[MIGRATE] Creating temporary postgres container for dump...");
+    
+    // Crear un contenedor simple que duerma (para poder ejecutar comandos en él)
+    let dump_container_json = json!({
+        "Image": postgres_image,
+        "Cmd": vec!["sleep", "300"],
+        "HostConfig": {
+            "NetworkMode": "host"
+        }
+    });
+    
+    let dump_container_config: Config<String> = serde_json::from_value(dump_container_json)
+        .map_err(|e| format!("Failed to create dump container config: {}", e))?;
+    
+    let dump_container = docker.create_container(
+        Some(CreateContainerOptions {
+            name: dump_container_name.clone(),
+            ..Default::default()
+        }),
+        dump_container_config,
+    ).await.map_err(|e| format!("Failed to create dump container: {}", e))?;
+    
+    println!("[MIGRATE] Starting dump container...");
+    docker.start_container(&dump_container.id, None::<StartContainerOptions<String>>)
+        .await.map_err(|e| format!("Failed to start dump container: {}", e))?;
+    
+    // Pequeña pausa para asegurar que el contenedor está listo
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    
+    // Ejecutar pg_dump usando docker exec
+    println!("[MIGRATE] Executing pg_dump via docker exec...");
+    
+    let pgpassword_env = format!("PGPASSWORD={}", config.password);
+    let port_str = config.port.to_string();
+    
+    let exec = docker.create_exec(
+        &dump_container.id,
+        CreateExecOptions {
+            cmd: Some(vec![
+                "pg_dump",
+                "-h",
+                host,
+                "-p",
+                &port_str,
+                "-U",
+                &config.user,
+                "-d",
+                &database_name,
+                "-F",
+                "p",
+                "--no-owner",
+                "--no-acl",
+            ]),
+            env: Some(vec![pgpassword_env.as_str()]),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            ..Default::default()
+        }
+    ).await.map_err(|e| format!("Failed to create exec for pg_dump: {}", e))?;
+    
+    let exec_start = docker.start_exec(&exec.id, None).await
+        .map_err(|e| format!("Failed to start pg_dump exec: {}", e))?;
+    
+    let mut dump_output = Vec::new();
+    let mut dump_stderr = Vec::new();
+    
+    if let StartExecResults::Attached { mut output, .. } = exec_start {
+        while let Some(msg) = output.next().await {
+            match msg {
+                Ok(bollard::container::LogOutput::StdOut { message }) => {
+                    dump_output.extend_from_slice(&message);
+                }
+                Ok(bollard::container::LogOutput::StdErr { message }) => {
+                    dump_stderr.extend_from_slice(&message);
+                }
+                Err(e) => {
+                    eprintln!("[MIGRATE] Error reading pg_dump output: {}", e);
+                }
+                _ => {}
+            }
+        }
     }
     
-    // Verificar que el dump se creó y tiene contenido
-    let dump_metadata = fs::metadata(&dump_path)
-        .map_err(|e| format!("Dump file not created: {}", e))?;
+    // Limpiar contenedor temporal
+    println!("[MIGRATE] Cleaning up temporary dump container...");
+    let _ = docker.remove_container(&dump_container_name, Some(RemoveContainerOptions {
+        force: true,
+        ..Default::default()
+    })).await;
     
-    if dump_metadata.len() == 0 {
-        return Err("Dump file is empty - no data exported".to_string());
+    // Verificar que obtuvimos datos
+    if dump_output.is_empty() {
+        let stderr = String::from_utf8_lossy(&dump_stderr);
+        return Err(format!("pg_dump produced no output. Error: {}", stderr));
     }
     
-    println!("[MIGRATE] Dump created successfully: {} bytes", dump_metadata.len());
+    // Escribir el dump al archivo
+    fs::write(&dump_path, &dump_output)
+        .map_err(|e| format!("Failed to write dump file: {}", e))?;
+    
+    println!("[MIGRATE] Dump created successfully: {} bytes", dump_output.len());
     
     // 2. Buscar puerto disponible
     let mut port = 5544;
@@ -1708,15 +1838,17 @@ async fn migrate_database(
     
     println!("[MIGRATE] Using port: {}", port);
     
-    // 3. Crear contenedor Docker
+    // 3. Crear contenedor Docker con la misma versión de PostgreSQL
     let container_name = format!("migrated-{}", database_name);
-    let image = "postgres:15";
     
-    // Pull image si no existe
+    // Usar la misma versión de postgres que el servidor local
+    let image = postgres_image.clone();
+    
+    // Pull image si no existe (puede que ya esté de la etapa de dump, pero por si acaso)
     println!("[MIGRATE] Pulling image: {}", image);
     let mut stream = docker.create_image(
         Some(CreateImageOptions {
-            from_image: image,
+            from_image: image.as_str(),
             ..Default::default()
         }),
         None,
@@ -1776,95 +1908,185 @@ async fn migrate_database(
     
     println!("[MIGRATE] Container started, waiting for PostgreSQL to be ready...");
     
-    // Esperar a que PostgreSQL esté listo (con retries)
+    // Esperar a que PostgreSQL esté listo (con retries usando docker exec)
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
     
-    // Verificar que PostgreSQL está listo
+    // Verificar que PostgreSQL está listo usando docker exec
     let mut retries = 0;
-    let max_retries = 10;
+    let max_retries = 15;
     loop {
-        let test_output = Command::new("psql")
-            .arg("-h")
-            .arg("localhost")
-            .arg("-p")
-            .arg(port.to_string())
-            .arg("-U")
-            .arg(&config.user)
-            .arg("-d")
-            .arg(&database_name)
-            .arg("-c")
-            .arg("SELECT 1;")
-            .env("PGPASSWORD", &config.password)
-            .output();
-        
-        match test_output {
-            Ok(output) if output.status.success() => {
-                println!("[MIGRATE] PostgreSQL is ready!");
-                break;
+        let exec = docker.create_exec(
+            &container.id,
+            CreateExecOptions {
+                cmd: Some(vec!["pg_isready", "-U", &config.user]),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                ..Default::default()
             }
-            _ => {
-                retries += 1;
-                if retries >= max_retries {
-                    return Err("PostgreSQL did not become ready in time".to_string());
+        ).await;
+        
+        if let Ok(exec) = exec {
+            if let Ok(start_exec) = docker.start_exec(&exec.id, None).await {
+                if let StartExecResults::Attached { mut output, .. } = start_exec {
+                    let mut success = false;
+                    while let Some(msg) = output.next().await {
+                        if let Ok(bollard::container::LogOutput::StdOut { .. }) = msg {
+                            success = true;
+                            break;
+                        }
+                    }
+                    if success {
+                        println!("[MIGRATE] PostgreSQL is ready!");
+                        break;
+                    }
                 }
-                println!("[MIGRATE] Waiting for PostgreSQL... ({}/{})", retries, max_retries);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            }
+        }
+        
+        retries += 1;
+        if retries >= max_retries {
+            return Err("PostgreSQL did not become ready in time".to_string());
+        }
+        println!("[MIGRATE] Waiting for PostgreSQL... ({}/{})", retries, max_retries);
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    }
+    
+    // 4. Restaurar dump en el nuevo contenedor
+    println!("[MIGRATE] Restoring dump to new container...");
+    
+    // Copiar el archivo dump al contenedor usando docker cp
+    // Primero, necesitamos usar el API de Docker para copiar el archivo
+    use tokio::fs::File;
+    use tokio::io::AsyncReadExt;
+    
+    let mut dump_file = File::open(&dump_path).await
+        .map_err(|e| format!("Failed to open dump file: {}", e))?;
+    
+    let mut dump_content_bytes = Vec::new();
+    dump_file.read_to_end(&mut dump_content_bytes).await
+        .map_err(|e| format!("Failed to read dump file: {}", e))?;
+    
+    // Usar tar para crear un archivo que podamos copiar al contenedor
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    
+    
+    let mut tar_gz = Vec::new();
+    {
+        let enc = GzEncoder::new(&mut tar_gz, Compression::default());
+        let mut tar = tar::Builder::new(enc);
+        
+        let mut header = tar::Header::new_gnu();
+        header.set_path("dump.sql").map_err(|e| format!("Failed to set path: {}", e))?;
+        header.set_size(dump_content_bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        
+        tar.append(&header, &dump_content_bytes[..])
+            .map_err(|e| format!("Failed to append to tar: {}", e))?;
+        
+        tar.finish().map_err(|e| format!("Failed to finish tar: {}", e))?;
+    }
+    
+    // Copiar al contenedor
+    docker.upload_to_container(
+        &container.id,
+        Some(bollard::container::UploadToContainerOptions {
+            path: "/tmp".to_string(),
+            ..Default::default()
+        }),
+        tar_gz.into(),
+    ).await.map_err(|e| format!("Failed to upload dump to container: {}", e))?;
+    
+    println!("[MIGRATE] Dump file copied to container");
+    
+    // Ahora ejecutar psql para restaurar el dump
+    let restore_exec = docker.create_exec(
+        &container.id,
+        CreateExecOptions {
+            cmd: Some(vec![
+                "psql",
+                "-U",
+                &config.user,
+                "-d",
+                &database_name,
+                "-f",
+                "/tmp/dump.sql"
+            ]),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            ..Default::default()
+        }
+    ).await.map_err(|e| format!("Failed to create restore exec: {}", e))?;
+    
+    let restore_start = docker.start_exec(&restore_exec.id, None).await
+        .map_err(|e| format!("Failed to start restore: {}", e))?;
+    
+    let mut restore_stdout = String::new();
+    let mut restore_stderr = String::new();
+    
+    if let StartExecResults::Attached { mut output, .. } = restore_start {
+        // Leer la salida
+        while let Some(msg) = output.next().await {
+            match msg {
+                Ok(bollard::container::LogOutput::StdOut { message }) => {
+                    restore_stdout.push_str(&String::from_utf8_lossy(&message));
+                }
+                Ok(bollard::container::LogOutput::StdErr { message }) => {
+                    restore_stderr.push_str(&String::from_utf8_lossy(&message));
+                }
+                Err(e) => eprintln!("[MIGRATE] Error reading restore output: {}", e),
+                _ => {}
             }
         }
     }
     
-    // 4. Restaurar dump en el nuevo contenedor usando psql (no pg_restore para plain format)
-    println!("[MIGRATE] Restoring dump to new container...");
-    
-    let restore_output = Command::new("psql")
-        .arg("-h")
-        .arg("localhost")
-        .arg("-p")
-        .arg(port.to_string())
-        .arg("-U")
-        .arg(&config.user)
-        .arg("-d")
-        .arg(&database_name)
-        .arg("-f")
-        .arg(&dump_path)
-        .env("PGPASSWORD", &config.password)
-        .output()
-        .map_err(|e| format!("Failed to execute psql restore: {}", e))?;
-    
-    let stderr = String::from_utf8_lossy(&restore_output.stderr);
-    let stdout = String::from_utf8_lossy(&restore_output.stdout);
-    
     println!("[MIGRATE] Restore output:");
-    println!("STDOUT: {}", stdout);
-    println!("STDERR: {}", stderr);
+    println!("STDOUT: {}", restore_stdout);
+    println!("STDERR: {}", restore_stderr);
     
-    if !restore_output.status.success() {
-        // psql puede tener warnings pero aún así funcionar
-        if stderr.contains("ERROR") && !stderr.contains("already exists") {
-            return Err(format!("Restore failed with errors:\n{}", stderr));
-        }
+    // Verificar si hubo errores críticos
+    if restore_stderr.contains("FATAL") || restore_stderr.contains("could not connect") {
+        return Err(format!("Restore failed with errors:\n{}", restore_stderr));
     }
     
     println!("[MIGRATE] Restore completed");
     
-    // 5. Verificar que los datos se restauraron
-    let verify_output = Command::new("psql")
-        .arg("-h")
-        .arg("localhost")
-        .arg("-p")
-        .arg(port.to_string())
-        .arg("-U")
-        .arg(&config.user)
-        .arg("-d")
-        .arg(&database_name)
-        .arg("-c")
-        .arg("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")
-        .env("PGPASSWORD", &config.password)
-        .output()
-        .map_err(|e| format!("Failed to verify data: {}", e))?;
+    // 5. Verificar que los datos se restauraron usando docker exec
+    println!("[MIGRATE] Verifying data restoration...");
+    let verify_exec = docker.create_exec(
+        &container.id,
+        CreateExecOptions {
+            cmd: Some(vec![
+                "psql",
+                "-U",
+                &config.user,
+                "-d",
+                &database_name,
+                "-t",
+                "-c",
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';"
+            ]),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            ..Default::default()
+        }
+    ).await.map_err(|e| format!("Failed to create verification exec: {}", e))?;
     
-    let verify_result = String::from_utf8_lossy(&verify_output.stdout);
-    println!("[MIGRATE] Verification - tables in public schema: {}", verify_result);
+    let verify_start = docker.start_exec(&verify_exec.id, None).await
+        .map_err(|e| format!("Failed to start verification: {}", e))?;
+    
+    let mut verify_result = String::new();
+    
+    if let StartExecResults::Attached { mut output, .. } = verify_start {
+        while let Some(msg) = output.next().await {
+            if let Ok(bollard::container::LogOutput::StdOut { message }) = msg {
+                verify_result.push_str(&String::from_utf8_lossy(&message));
+            }
+        }
+    }
+    
+    println!("[MIGRATE] Verification - tables in public schema: {}", verify_result.trim());
     
     // 6. Limpiar archivo dump
     let _ = fs::remove_file(&dump_path);
