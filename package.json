@@ -1,7 +1,7 @@
 {
   "name": "docker-db-manager",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.3",
   "description": "Docker Database Manager - Multi-database management tool for macOS",
   "type": "module",
   "scripts": {

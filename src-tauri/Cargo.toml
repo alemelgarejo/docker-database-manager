@@ -1,6 +1,6 @@
 [package]
 name = "docker-db-manager"
-version = "0.1.0"
+version = "1.0.3"
 description = "Docker Database Manager - Multi-database management tool for macOS"
 authors = ["alemelgarejo"]
 edition = "2021"
