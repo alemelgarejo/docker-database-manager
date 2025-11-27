@@ -389,33 +389,93 @@ async function openDockerDesktop() {
  * Retry Docker connection
  */
 async function retryDockerConnection() {
-  showLoading('Checking Docker connection...');
+  logger.info('[Retry] Starting Docker reconnection attempt...');
+  showLoading('Reconnecting to Docker...');
   
   try {
+    // First, try to reconnect the Docker client (creates new connection)
+    logger.debug('[Retry] Calling reconnect_docker command...');
+    try {
+      await invoke('reconnect_docker');
+      logger.info('[Retry] Docker client reconnected successfully');
+    } catch (reconnectError) {
+      logger.warn('[Retry] Reconnect command failed:', reconnectError);
+      // Continue anyway, maybe it's already connected
+    }
+    
+    // Now check if Docker is actually connected
+    logger.debug('[Retry] Checking Docker status...');
     const connected = await checkDocker();
+    logger.info('[Retry] Docker check result:', connected);
     
     if (connected) {
-      showNotification('Docker connected successfully!', 'success');
+      logger.info('[Retry] Docker is connected! Starting reconnection process...');
+      
+      // Hide loading and Docker error overlay first
+      hideLoading();
       hideDockerError();
       
+      showNotification('Docker connected successfully! Reloading data...', 'success');
+      
       // Clear all cache to get fresh data
+      logger.debug('[Retry] Clearing cache...');
       cache.clear();
       
-      // Reload data
-      await loadDashboardStats();
-      await loadContainers(false, true);
-      
-      // Re-setup polling if it was cleared
-      if (polling.getStats().total === 0) {
-        setupPolling();
+      // Reload data with loading indicator
+      showLoading('Loading data...');
+      try {
+        logger.debug('[Retry] Loading dashboard stats...');
+        await loadDashboardStats();
+        
+        logger.debug('[Retry] Loading containers...');
+        await loadContainers(false, true);
+        
+        logger.info('[Retry] Data loaded successfully');
+      } catch (dataError) {
+        logger.error('[Retry] Error loading data:', dataError);
+        showNotification('Data loaded with some errors: ' + dataError, 'warning');
       }
+      
+      // Re-setup or resume polling
+      try {
+        const pollingStats = polling.getStats();
+        logger.debug('[Retry] Current polling stats:', pollingStats);
+        
+        if (pollingStats.total === 0) {
+          // No polling tasks registered, setup new ones
+          logger.info('[Retry] No polling tasks found, setting up new ones...');
+          setupPolling();
+          logger.info('[Retry] Polling setup completed');
+        } else {
+          // Polling tasks exist, resume them and reset errors
+          logger.info('[Retry] Resuming existing polling tasks...');
+          polling.resumeAll();
+          logger.info('[Retry] Polling resumed successfully', pollingStats);
+        }
+      } catch (pollingError) {
+        logger.error('[Retry] Error with polling:', pollingError);
+        // Try to setup fresh polling
+        try {
+          polling.clear();
+          setupPolling();
+          logger.info('[Retry] Fresh polling setup completed');
+        } catch (freshPollingError) {
+          logger.error('[Retry] Failed to setup fresh polling:', freshPollingError);
+        }
+      }
+      
+      showNotification('Reconnected successfully!', 'success');
+      logger.info('[Retry] Reconnection completed successfully');
     } else {
-      showNotification('Docker is still not available. Please start Docker Desktop.', 'warning');
+      logger.warn('[Retry] Docker is still not available');
+      showNotification('Docker is still not available. Please make sure Docker Desktop is running.', 'warning');
     }
   } catch (e) {
+    logger.error('[Retry] Error during reconnection:', e);
     showNotification('Failed to connect to Docker: ' + e, 'error');
   } finally {
     hideLoading();
+    logger.info('[Retry] Reconnection attempt finished');
   }
 }
 
