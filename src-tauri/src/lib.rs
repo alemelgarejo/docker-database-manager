@@ -660,6 +660,48 @@ fn connect_docker() -> Result<Docker, String> {
     Err("No se pudo conectar a Docker. Asegúrate de que Docker Desktop está corriendo.".to_string())
 }
 
+/// Reconnect to Docker daemon
+/// 
+/// This function creates a new Docker client connection, replacing the old one.
+/// Useful when Docker was not available at startup but is now running.
+/// 
+/// # Returns
+/// * `Ok(String)` - Success message
+/// * `Err(String)` - Error message if reconnection fails
+#[tauri::command]
+async fn reconnect_docker(state: State<'_, AppState>) -> Result<String, String> {
+    println!("[Reconnect] Attempting to reconnect to Docker...");
+    
+    // Try to create a new Docker connection
+    match connect_docker() {
+        Ok(new_docker) => {
+            println!("[Reconnect] Successfully created new Docker connection");
+            
+            // Test the connection with a ping
+            match new_docker.ping().await {
+                Ok(_) => {
+                    println!("[Reconnect] Ping successful, replacing old connection");
+                    
+                    // Replace the old Docker client with the new one
+                    let mut docker = state.docker.lock().await;
+                    *docker = new_docker;
+                    
+                    println!("[Reconnect] ✅ Docker reconnected successfully");
+                    Ok("Docker reconnected successfully".to_string())
+                }
+                Err(e) => {
+                    println!("[Reconnect] ⚠️ Ping failed: {}", e);
+                    Err(format!("Docker connection created but ping failed: {}", e))
+                }
+            }
+        }
+        Err(e) => {
+            println!("[Reconnect] ❌ Failed to create connection: {}", e);
+            Err(format!("Failed to reconnect to Docker: {}", e))
+        }
+    }
+}
+
 /// Open Docker Desktop application
 /// 
 /// # Returns
@@ -745,6 +787,7 @@ pub fn run() {
         .manage(MigrationState { migrated: Mutex::new(Vec::new()) })
         .invoke_handler(tauri::generate_handler![
             check_docker,
+            reconnect_docker,
             open_docker_desktop, 
             get_database_types, 
             list_containers,
