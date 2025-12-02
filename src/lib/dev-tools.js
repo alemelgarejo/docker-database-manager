@@ -3,7 +3,7 @@
  * Global utilities for debugging and development
  */
 
-'use strict';
+
 
 import { cache } from './utils/cache.js';
 import { polling } from './utils/polling.js';
