@@ -9,7 +9,7 @@
  * - Dev tools integration
  */
 
-'use strict';
+
 
 import { createLogger } from '../utils/logger.js';
 

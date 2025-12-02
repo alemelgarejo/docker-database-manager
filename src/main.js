@@ -13,14 +13,19 @@ import { createLogger } from './lib/utils/logger.js';
 import { setupDevTools } from './lib/dev-tools.js';
 import { appState } from './lib/state/AppState.js';
 import { TabManager } from './lib/managers/TabManager.js';
+import { FavoritesManager } from './lib/managers/FavoritesManager.js';
 
 // Create loggers for different contexts
 const logger = createLogger('Main');
 const tauriLogger = createLogger('Tauri');
 const updateLogger = createLogger('Updates');
 
-// Create tab manager instance
+// Create tab manager and favorites manager instances
 const tabManager = new TabManager();
+const favoritesManager = new FavoritesManager();
+
+// Store favorites manager in appState for global access
+appState.setComponent('favoritesManager', favoritesManager);
 
 // Global search filter instances and migration data
 let migrationSearchFilters = null;
@@ -498,12 +503,23 @@ function renderContainerCard(c, index) {
   };
   const dbIcon = getIcon(dbIconMap[c.db_type] || 'database');
   
+  // Check if this container is favorited
+  const isFavorite = favoritesManager.isFavorite(c.id);
+  const favoriteClass = isFavorite ? 'is-favorite' : '';
+  
   // Store container data for URL generation
   window[`containerData_${index}`] = c;
   
   return `
-    <div class="db-card" data-db-type="${c.db_type}">
+    <div class="db-card ${favoriteClass}" data-db-type="${c.db_type}" data-container-id="${c.id}">
       <div class="db-card-header">
+        <button 
+          class="favorite-btn ${isFavorite ? 'active' : ''}" 
+          onclick="toggleFavorite('${c.id}')"
+          data-tooltip="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}"
+        >
+          ${getIcon(isFavorite ? 'starFilled' : 'star')}
+        </button>
         <div class="db-card-icon">${dbIcon}</div>
         <div class="db-card-info">
           <h3 class="db-card-title">${c.name}</h3>
@@ -754,6 +770,9 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
     if (searchFilters) {
       containers = searchFilters.applyFilters(allContainers);
     }
+    
+    // Sort by favorites (favorites first)
+    containers = favoritesManager.sortByFavorites(containers);
 
     if (!containers.length) {
       // Destroy virtual scroll if exists
@@ -777,13 +796,18 @@ async function loadContainers(applyFilters = false, forceRefresh = false) {
     
     // Mostrar información de resultados
     if (resultsCount) {
+      const favCount = favoritesManager.getCount();
       if (searchFilters && searchFilters.getActiveFiltersCount() > 0) {
         resultsCount.innerHTML = `
           Showing <strong>${containers.length}</strong> of <strong>${allContainers.length}</strong> databases
           <span class="filter-badge">${searchFilters.getActiveFiltersCount()} active filters</span>
+          ${favCount > 0 ? `<span class="filter-badge favorite-badge">${getIcon('star')} ${favCount} favorites</span>` : ''}
         `;
       } else {
-        resultsCount.textContent = `Showing ${containers.length} databases`;
+        resultsCount.innerHTML = `
+          Showing ${containers.length} databases
+          ${favCount > 0 ? `<span class="filter-badge favorite-badge">${getIcon('star')} ${favCount} favorites</span>` : ''}
+        `;
       }
     }
 
@@ -1842,7 +1866,7 @@ function initializeDarkMode() {
 }
 
 // Expose dark mode toggle globally
-window.toggleDarkMode = function() {
+window.toggleDarkMode = () => {
   const darkModeToggle = document.getElementById('dark-mode-toggle');
   if (darkModeToggle) {
     darkModeToggle.click();
@@ -4005,4 +4029,69 @@ window.resetSettings = resetSettings;
 window.loadSettings = loadSettings;
 window.applyMigrationDefaults = applyMigrationDefaults;
 
+// ===== FAVORITES MANAGEMENT =====
+
+/**
+ * Toggle favorite status of a container
+ * @param {string} containerId - Container ID to toggle
+ */
+function toggleFavorite(containerId) {
+  const isFavorite = favoritesManager.toggleFavorite(containerId);
+  
+  // Update the card UI immediately
+  const card = document.querySelector(`.db-card[data-container-id="${containerId}"]`);
+  if (card) {
+    const favoriteBtn = card.querySelector('.favorite-btn');
+    if (favoriteBtn) {
+      favoriteBtn.classList.toggle('active', isFavorite);
+      favoriteBtn.innerHTML = getIcon(isFavorite ? 'starFilled' : 'star');
+      favoriteBtn.setAttribute('data-tooltip', isFavorite ? 'Remove from favorites' : 'Add to favorites');
+    }
+    card.classList.toggle('is-favorite', isFavorite);
+  }
+  
+  // Show notification
+  showNotification(
+    isFavorite ? 'Added to favorites' : 'Removed from favorites',
+    'success'
+  );
+  
+  // Reload to re-sort (favorites first)
+  loadContainers(true);
+}
+
+/**
+ * Filter to show only favorite databases
+ */
+function showOnlyFavorites() {
+  const searchFilters = appState.getComponent('searchFilters');
+  if (searchFilters) {
+    // Toggle favorites filter
+    const currentlyShowingFavorites = appState.getUI('showingOnlyFavorites') || false;
+    appState.setUI('showingOnlyFavorites', !currentlyShowingFavorites);
+    
+    if (!currentlyShowingFavorites) {
+      // Show only favorites
+      const allContainers = appState.getData('allContainers');
+      const favorites = favoritesManager.filterFavorites(allContainers);
+      
+      if (favorites.length === 0) {
+        showNotification('No favorite databases found', 'info');
+        return;
+      }
+      
+      showNotification(`Showing ${favorites.length} favorite databases`, 'info');
+    } else {
+      // Show all
+      showNotification('Showing all databases', 'info');
+    }
+    
+    loadContainers(true);
+  }
+}
+
+// Expose favorites functions globally
+window.toggleFavorite = toggleFavorite;
+window.showOnlyFavorites = showOnlyFavorites;
+window.favoritesManager = favoritesManager;
 

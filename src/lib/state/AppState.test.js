@@ -5,7 +5,7 @@
  * Run these tests manually in the browser console via window.__DEV__.test.runAppStateTests()
  */
 
-'use strict';
+
 
 import { AppState } from './AppState.js';
 

@@ -10,7 +10,7 @@
  * - Production mode support
  */
 
-'use strict';
+
 
 /**
  * Log levels with priority
