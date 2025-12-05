@@ -686,6 +686,8 @@ body {
   border-top: 1px solid var(--border);
 }
 
+/* Action buttons for database cards */
+.action-btn,
 .db-action-btn {
   width: 36px;
   height: 36px;
@@ -701,6 +703,7 @@ body {
   transition: all 0.2s ease;
 }
 
+.action-btn:hover,
 .db-action-btn:hover {
   transform: translateY(-2px);
   color: var(--text);
@@ -708,8 +711,29 @@ body {
   border-color: var(--primary);
 }
 
+.action-btn svg,
 .db-action-btn svg {
   flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.action-btn-danger {
+  color: var(--danger);
+}
+
+.action-btn-danger svg {
+  color: var(--danger);
+}
+
+.action-btn-danger:hover {
+  background-color: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.action-btn-danger:hover svg {
+  color: var(--danger);
 }
 
 .db-btn-start,
@@ -1019,6 +1043,29 @@ body {
   display: flex;
 }
 
+/* Confirm Modal (dynamic modals created via JS) */
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2xl);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.confirm-modal.active {
+  opacity: 1;
+}
+
+.confirm-modal-content {
+  max-width: 450px;
+}
+
 .modal-content,
 .create-modal-content,
 .logs-modal-content,
@@ -1031,10 +1078,20 @@ body {
   overflow-y: auto;
   animation: slideIn 0.3s ease;
   border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Create modal should fit content, not stretch to max-height */
+#create-modal .modal-content {
+  max-height: none;
+  height: auto;
+  overflow-y: visible;
 }
 
 .modal-header,
-.create-modal-header {
+.create-modal-header,
+.confirm-modal-header {
   padding: var(--spacing-xl) var(--spacing-2xl);
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -1052,7 +1109,8 @@ body {
 
 .modal-close,
 .create-modal-close,
-.confirm-modal-close {
+.confirm-modal-close,
+.close-btn {
   width: 32px;
   height: 32px;
   border: none;
@@ -1070,7 +1128,8 @@ body {
 
 .modal-close:hover,
 .create-modal-close:hover,
-.confirm-modal-close:hover {
+.confirm-modal-close:hover,
+.close-btn:hover {
   background-color: var(--hover);
   color: var(--text);
 }
@@ -1078,13 +1137,20 @@ body {
 .modal-body,
 .create-modal-body,
 .confirm-modal-body {
-  padding: var(--spacing-2xl);
+  padding: var(--spacing-md) var(--spacing-2xl);
+  flex-shrink: 0;  /* Don't shrink */
+  flex-grow: 0;    /* Don't grow to fill space */
+}
+
+/* Specific padding for create form to reduce empty space */
+#create-form.modal-body {
+  padding-bottom: var(--spacing-sm);
 }
 
 .modal-footer,
 .create-modal-footer,
 .confirm-modal-footer {
-  padding: var(--spacing-lg) var(--spacing-2xl);
+  padding: var(--spacing-md) var(--spacing-2xl) var(--spacing-lg);
   border-top: 1px solid var(--border);
   display: flex;
   gap: var(--spacing-md);
@@ -1099,11 +1165,161 @@ body {
   justify-content: flex-end;
 }
 
+/* ===== DATABASE TYPE SELECTION (Modal Step 1) ===== */
+.db-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.db-type-card {
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl) var(--spacing-md);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.db-type-card * {
+  pointer-events: none;
+}
+
+.db-type-card:hover {
+  border-color: var(--primary);
+  background: var(--hover);
+  transform: translateY(-2px);
+}
+
+.db-type-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  line-height: 1;
+}
+
+.db-type-icon svg {
+  width: 40px;
+  height: 40px;
+  fill: var(--primary);
+}
+
+.db-type-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Database-specific icon colors */
+.db-type-card[data-db-type="postgresql"] .db-type-icon svg,
+.selected-db-type[data-db-type="postgresql"] .db-icon-large svg {
+  fill: #336791;
+}
+
+.db-type-card[data-db-type="mysql"] .db-type-icon svg,
+.selected-db-type[data-db-type="mysql"] .db-icon-large svg {
+  fill: #00758f;
+}
+
+.db-type-card[data-db-type="mongodb"] .db-type-icon svg,
+.selected-db-type[data-db-type="mongodb"] .db-icon-large svg {
+  fill: #00ed64;
+}
+
+.db-type-card[data-db-type="redis"] .db-type-icon svg,
+.selected-db-type[data-db-type="redis"] .db-icon-large svg {
+  fill: #dc382d;
+}
+
+.db-type-card[data-db-type="mariadb"] .db-type-icon svg,
+.selected-db-type[data-db-type="mariadb"] .db-icon-large svg {
+  fill: #003545;
+}
+
+.selected-db-type {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.db-icon-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  line-height: 1;
+}
+
+.db-icon-large svg {
+  width: 40px;
+  height: 40px;
+}
+
+/* Form steps styling */
+.form-step {
+  display: block;
+}
+
+/* Back button in modal */
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.25;
+  height: 36px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: var(--spacing-lg);
+}
+
+.btn-back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-back span {
+  line-height: 1;
+}
+
+.btn-back:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--primary);
+}
+
 /* ===== FORMS ===== */
 .form-group,
 #username-group,
 #password-group {
   margin-bottom: var(--spacing-lg);
+}
+
+/* Reduce margin on last form group to avoid excessive space */
+.form-group:last-child,
+#password-group:last-child,
+#username-group:last-child {
+  margin-bottom: 0;
 }
 
 .form-group label {

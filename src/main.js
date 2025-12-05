@@ -1096,7 +1096,7 @@ async function createDB(e) {
     console.log('Database created:', result);
 
     showNotification('Database created successfully', 'success');
-    selectedTemplateForDb = null; // Reset template selection
+    appState.setUI("selectedTemplateForDb", null); // Reset template selection
     
     // Invalidate cache to show new database
     cache.invalidate('containers');
@@ -1488,6 +1488,7 @@ function showStep1() {
   document.getElementById('step-2').style.display = 'none';
 
   const grid = document.getElementById('db-types-grid');
+  const databaseTypes = appState.getData('databaseTypes') || [];
   grid.innerHTML = databaseTypes
     .map(
       (type) => `
@@ -1505,6 +1506,7 @@ function showStep2() {
   document.getElementById('step-1').style.display = 'none';
   document.getElementById('step-2').style.display = 'block';
 
+  const databaseTypes = appState.getData('databaseTypes') || [];
   const dbType = databaseTypes.find((t) => t.id === appState.getUI("selectedDbType"));
   if (!dbType) return;
 
@@ -1586,6 +1588,7 @@ window.selectDatabaseType = (typeId) => {
 // Volver al paso 1
 window.goBackToStep1 = () => {
   appState.setUI("selectedDbType", null);
+  appState.setUI("selectedTemplateForDb", null);
   showStep1();
   document.getElementById('create-form').reset();
 };
@@ -1608,6 +1611,7 @@ window.closeCreateModal = () => {
   document.getElementById('create-modal').classList.remove('active');
   document.getElementById('create-form').reset();
   appState.setUI("selectedDbType", null);
+  appState.setUI("selectedTemplateForDb", null);
   showStep1();
 };
 
@@ -3452,7 +3456,7 @@ function loadTemplateOptions() {
   ];
 
   // Destroy previous instance if exists
-  if (templateSelect) {
+  if (appState.getComponent("templateSelect")) {
     appState.getComponent("templateSelect").destroy();
   }
 
@@ -3462,13 +3466,16 @@ function loadTemplateOptions() {
     items: items,
     value: '',
     onChange: (value) => {
-  appState.setUI("selectedTemplateForDb", value || null);
+      appState.setUI("selectedTemplateForDb", value || null);
       if (appState.getUI("selectedTemplateForDb")) {
-        const template = templates[selectedTemplateForDb];
+        const template = templates[appState.getUI("selectedTemplateForDb")];
         showNotification(`Template "${template.name}" selected. Configuration will be applied on creation.`, 'info');
       }
     }
   });
+  
+  // Store in appState
+  appState.setComponent("templateSelect", templateSelect);
 }
 
 window.closeTemplateDetailsModal = () => {
