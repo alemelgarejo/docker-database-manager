@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="src/styles.css">
+</head>
+<body style="background: #0f172a; padding: 50px;">
+    <div id="create-modal" class="modal active">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Database</h2>
+                <button class="close-btn">×</button>
+            </div>
+            <form id="create-form" class="modal-body">
+                <div class="form-group">
+                    <label>Database Name:</label>
+                    <input type="text" placeholder="my_database" />
+                </div>
+                <div class="form-group">
+                    <label>Port:</label>
+                    <input type="number" placeholder="5432" />
+                </div>
+                <div class="form-group">
+                    <label>Version:</label>
+                    <input type="text" placeholder="16" />
+                </div>
+            </form>
+            <div class="modal-footer">
+                <button class="btn btn-ghost">Cancel</button>
+                <button class="btn btn-primary">Create</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

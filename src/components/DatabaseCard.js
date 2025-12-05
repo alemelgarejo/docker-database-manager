@@ -91,7 +91,7 @@ export class DatabaseCard {
           <button class="action-btn" onclick="showLogs('${container.id}')" data-tooltip="View logs">
             ${getIcon('fileText')}
           </button>
-          <button class="action-btn action-btn-danger" onclick="confirmRemove('${container.id}', '${container.name}')" data-tooltip="Delete database">
+          <button class="action-btn action-btn-danger" onclick="confirmRemove('${container.id}', '${container.name.replace(/'/g, "\\'")}' )" data-tooltip="Delete database">
             ${getIcon('trash')}
           </button>
         </div>
