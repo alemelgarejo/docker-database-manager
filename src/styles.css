@@ -802,6 +802,33 @@ body {
   color: var(--primary);
 }
 
+/* Mini action button for inline actions */
+.db-action-btn-mini {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.db-action-btn-mini:hover {
+  color: var(--primary);
+  background-color: var(--hover);
+  border-color: var(--primary);
+}
+
+.db-action-btn-mini svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
 /* Database Type Specific Colors */
 .db-card[data-db-type="postgresql"] .db-card-icon {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);

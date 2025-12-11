@@ -49,6 +49,16 @@ export class DatabaseService {
   }
 
   /**
+   * Update container port
+   * @param {string} containerId - Container ID
+   * @param {number} newPort - New host port number
+   * @returns {Promise<string>} Success message
+   */
+  static async updateContainerPort(containerId, newPort) {
+    return invoke('update_container_port', { containerId, newPort });
+  }
+
+  /**
    * Get container logs
    */
   static async getContainerLogs(containerId) {

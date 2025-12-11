@@ -547,6 +547,127 @@ async fn rename_container(state: State<'_, AppState>, container_id: String, new_
     Ok(format!("Container renamed to '{}'", new_name))
 }
 
+/// Update the port mapping of a container
+/// 
+/// This recreates the container with a new port mapping while preserving all other settings.
+/// The container must be stopped before calling this function.
+/// 
+/// # Arguments
+/// * `container_id` - The ID of the container to update
+/// * `new_port` - The new host port to use
+/// 
+/// # Returns
+/// * `Ok(String)` - Success message with new container ID
+/// * `Err(String)` - Error message if update fails
+#[tauri::command]
+async fn update_container_port(
+    state: State<'_, AppState>, 
+    container_id: String, 
+    new_port: u16
+) -> Result<String, String> {
+    let docker = state.docker.lock().await;
+    
+    println!("🔧 Updating container port: {} -> {}", container_id, new_port);
+    
+    // 1. Validar que el nuevo puerto no esté en uso
+    let containers = docker.list_containers(Some(ListContainersOptions::<String> { 
+        all: true, 
+        ..Default::default() 
+    })).await.map_err(|e| format!("Error listing containers: {}", e))?;
+    
+    for container in &containers {
+        if let Some(id) = &container.id {
+            if id == &container_id {
+                continue; // Skip the container we're updating
+            }
+        }
+        
+        if let Some(ports) = &container.ports {
+            for port in ports {
+                if let Some(public_port) = port.public_port {
+                    if public_port == new_port {
+                        return Err(format!("Port {} is already in use by another container", new_port));
+                    }
+                }
+            }
+        }
+    }
+    
+    // 2. Inspeccionar el contenedor para obtener su configuración
+    let container_info = docker.inspect_container(&container_id, None)
+        .await
+        .map_err(|e| format!("Error inspecting container: {}", e))?;
+    
+    // 3. Verificar que el contenedor esté detenido
+    if let Some(state_info) = &container_info.state {
+        if state_info.running == Some(true) {
+            return Err("Container must be stopped before updating port. Please stop it first.".to_string());
+        }
+    }
+    
+    // 4. Extraer la configuración del contenedor
+    let config = container_info.config.ok_or("Container config not found")?;
+    let old_name = container_info.name.ok_or("Container name not found")?;
+    let container_name = old_name.trim_start_matches('/').to_string();
+    
+    let image = config.image.ok_or("Container image not found")?;
+    let env = config.env;
+    let labels = config.labels;
+    let exposed_ports = config.exposed_ports;
+    
+    // 5. Obtener el puerto interno del contenedor (el primero que encuentre)
+    let internal_port = exposed_ports
+        .as_ref()
+        .and_then(|ports| ports.keys().next())
+        .ok_or("No exposed ports found in container")?
+        .clone();
+    
+    println!("📝 Container info - Name: {}, Image: {}, Internal port: {}", container_name, image, internal_port);
+    
+    // 6. Crear nueva configuración con el nuevo puerto
+    let new_host_config = json!({
+        "PortBindings": {
+            &internal_port: [{"HostPort": new_port.to_string(), "HostIp": "0.0.0.0"}]
+        }
+    });
+    
+    let new_container_config = json!({
+        "Image": image,
+        "Env": env,
+        "ExposedPorts": exposed_ports,
+        "Labels": labels,
+        "HostConfig": new_host_config
+    });
+    
+    let container_config: Config<String> = serde_json::from_value(new_container_config)
+        .map_err(|e| format!("Error creating container config: {}", e))?;
+    
+    // 7. Eliminar el contenedor viejo (sin volúmenes para preservar datos)
+    println!("🗑️ Removing old container...");
+    docker.remove_container(
+        &container_id,
+        Some(RemoveContainerOptions {
+            v: false, // Preserve volumes
+            force: true,
+            ..Default::default()
+        })
+    ).await.map_err(|e| format!("Error removing old container: {}", e))?;
+    
+    // 8. Crear nuevo contenedor con la misma configuración pero diferente puerto
+    println!("🔨 Creating new container with port {}...", new_port);
+    let new_container = docker.create_container(
+        Some(CreateContainerOptions {
+            name: container_name.clone(),
+            ..Default::default()
+        }),
+        container_config
+    ).await.map_err(|e| format!("Error creating new container: {}", e))?;
+    
+    println!("✅ Container recreated successfully with new port: {}", new_port);
+    
+    Ok(format!("Container port updated to {}. Container ID: {}", new_port, new_container.id))
+}
+
 #[tauri::command]
 async fn remove_container(state: State<'_, AppState>, container_id: String, remove_volumes: bool) -> Result<String, String> {
     let docker = state.docker.lock().await;
@@ -798,6 +919,7 @@ pub fn run() {
             stop_container, 
             restart_container,
             rename_container,
+            update_container_port,
             remove_container, 
             get_logs, 
             exec_sql, 

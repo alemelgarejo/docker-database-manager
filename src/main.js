@@ -529,9 +529,16 @@ function renderContainerCard(c, index) {
       </div>
       
       <div class="db-card-data">
-        <div class="db-data-item" onclick="copyToClipboard('${c.port}', 'Port copied!')" data-tooltip="Click to copy">
+        <div class="db-data-item" style="position: relative;">
           <span class="db-data-label">Port</span>
-          <span class="db-data-value">${c.port}</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="db-data-value" onclick="copyToClipboard('${c.port}', 'Port copied!')" style="cursor: pointer;" data-tooltip="Click to copy">${c.port}</span>
+            ${c.status !== 'running' ? `
+              <button class="db-action-btn-mini" onclick="openEditPortModal('${c.id}', '${c.port}', '${c.name.replace(/'/g, "\\'")}' )" data-tooltip="Edit port" style="padding: 4px;">
+                ${getIcon('edit')}
+              </button>
+            ` : ''}
+          </div>
         </div>
         <div class="db-data-item" onclick="copyToClipboard('${shortId}', 'ID copied!')" data-tooltip="Click to copy">
           <span class="db-data-label">Container ID</span>
@@ -1430,6 +1437,97 @@ async function executeRename(e) {
   }
 }
 
+// ==================== EDIT PORT MODAL ====================
+
+/**
+ * Open edit port modal
+ * @param {string} containerId - Container ID
+ * @param {string} currentPort - Current port number
+ * @param {string} containerName - Container name
+ */
+function openEditPortModal(containerId, currentPort, containerName) {
+  console.log('[openEditPortModal]', { containerId, currentPort, containerName });
+  
+  appState.setModal("currentEditPortContainerId", containerId);
+  document.getElementById('edit-port-container-name').textContent = containerName;
+  document.getElementById('edit-port-current').value = currentPort;
+  document.getElementById('edit-port-new').value = '';
+  document.getElementById('edit-port-modal').classList.add('active');
+  
+  // Focus on input after modal animation
+  setTimeout(() => {
+    document.getElementById('edit-port-new').focus();
+  }, 100);
+}
+
+/**
+ * Close edit port modal
+ */
+function closeEditPortModal() {
+  document.getElementById('edit-port-modal').classList.remove('active');
+  document.getElementById('edit-port-form').reset();
+  appState.setModal("currentEditPortContainerId", null);
+}
+
+/**
+ * Execute port update
+ * @param {Event} e - Form submit event
+ */
+async function executeEditPort(e) {
+  e.preventDefault();
+  const newPortStr = document.getElementById('edit-port-new').value.trim();
+  const newPort = parseInt(newPortStr, 10);
+  
+  console.log('[executeEditPort] Starting...', {
+    newPort,
+    containerId: appState.getModal("currentEditPortContainerId"),
+  });
+  
+  if (!newPort || newPort < 1024 || newPort > 65535) {
+    showNotification('Port must be between 1024 and 65535', 'error');
+    return;
+  }
+
+  if (!appState.getModal("currentEditPortContainerId")) {
+    console.error('[executeEditPort] currentEditPortContainerId is null or undefined!');
+    showNotification('No container selected', 'error');
+    return;
+  }
+
+  // Save the ID in a local variable before closing modal
+  const containerIdToUpdate = appState.getModal("currentEditPortContainerId");
+  
+  closeEditPortModal();
+  showLoading('Updating container port...');
+
+  try {
+    console.log('[executeEditPort] Calling invoke with:', {
+      containerId: containerIdToUpdate,
+      newPort: newPort,
+    });
+    
+    const result = await invoke('update_container_port', {
+      containerId: containerIdToUpdate,
+      newPort: newPort
+    });
+    
+    console.log('[executeEditPort] Success:', result);
+    showNotification(result, 'success');
+    
+    // Invalidate cache to force refresh
+    cache.invalidate('containers');
+    await loadContainers(false, true);
+    await loadDashboardStats();
+  } catch (e) {
+    console.error('[executeEditPort] Error:', e);
+    showNotification('Error updating port: ' + e, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ==================== SQL MODAL ====================
+
 // Removed: currentSQL = null; // Now using appState
 function showSQL(id, db) {
   appState.setModal("currentSQL", { id, db });
@@ -1638,6 +1736,9 @@ window.openRenameModal = openRenameModal;
 window.openRenameModalFromButton = openRenameModalFromButton;
 window.closeRenameModal = closeRenameModal;
 window.executeRename = executeRename;
+window.openEditPortModal = openEditPortModal;
+window.closeEditPortModal = closeEditPortModal;
+window.executeEditPort = executeEditPort;
 
 // Función para cambiar idioma
 window.changeLanguage = (lang) => {
