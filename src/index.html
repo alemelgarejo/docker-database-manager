@@ -966,6 +966,47 @@
         </div>
       </div>
 
+      <!-- Modal: Edit Port -->
+      <div id="edit-port-modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Edit Container Port</h2>
+            <button class="close-btn" onclick="closeEditPortModal()">×</button>
+          </div>
+          <form id="edit-port-form" onsubmit="executeEditPort(event)">
+            <div class="modal-body">
+              <p>Change port for container: <strong id="edit-port-container-name"></strong></p>
+              <div class="form-group">
+                <label for="edit-port-current">Current Port:</label>
+                <input
+                  type="text"
+                  id="edit-port-current"
+                  disabled
+                  style="background: var(--bg-secondary); cursor: not-allowed;"
+                />
+              </div>
+              <div class="form-group">
+                <label for="edit-port-new">New Port:</label>
+                <input
+                  type="number"
+                  id="edit-port-new"
+                  required
+                  placeholder="5433"
+                  min="1024"
+                  max="65535"
+                  autocomplete="off"
+                />
+                <small>⚠️ Warning: The container will be recreated with the new port. It must be stopped first.</small>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="closeEditPortModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary">Update Port</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- Modal: SQL Console -->
       <div id="sql-modal" class="modal">
         <div class="modal-content modal-large">

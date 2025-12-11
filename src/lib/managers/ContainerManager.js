@@ -141,6 +141,29 @@ export class ContainerManager {
   }
 
   /**
+   * Update container port
+   * @param {string} containerId - Container ID
+   * @param {number} newPort - New host port number
+   * @returns {Promise<string>} Success message
+   */
+  async updateContainerPort(containerId, newPort) {
+    showLoading();
+
+    try {
+      const result = await DatabaseService.updateContainerPort(containerId, newPort);
+      showNotification('Container port updated successfully', 'success');
+      await this.loadContainers();
+      return result;
+    } catch (error) {
+      console.error('Error updating container port:', error);
+      showNotification('Error: ' + error, 'error');
+      throw error;
+    } finally {
+      hideLoading();
+    }
+  }
+
+  /**
    * Get container by ID
    */
   getContainer(containerId) {
